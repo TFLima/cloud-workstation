@@ -59,6 +59,9 @@ jobs:
       - name: Preparar usuário como o cloud-init faria
         run: |
           sudo useradd -m -s /bin/bash dev
+          # O cloud-init dá sudo sem senha ao operador (e só a ele; ADR-0008).
+          echo 'dev ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-cdw-dev >/dev/null
+          sudo chmod 0440 /etc/sudoers.d/90-cdw-dev
           sudo install -d -m 0755 /etc/cdw
           printf 'CDW_USER=dev\nCDW_ADMIN_CIDR=203.0.113.10/32\nCDW_BOOTSTRAP_VERSION=ci\n' \
             | sudo tee /etc/cdw/bootstrap.env >/dev/null

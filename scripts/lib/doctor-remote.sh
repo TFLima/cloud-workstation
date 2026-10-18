@@ -34,6 +34,19 @@ sshd_cfg="$(sudo -n sshd -T 2>/dev/null || true)"
 if grep -qx 'passwordauthentication no' <<<"$sshd_cfg"; then ok "SSH sem senha"; else fail "SSH aceita senha"; fi
 if grep -qx 'permitrootlogin no' <<<"$sshd_cfg"; then ok "SSH sem root"; else fail "SSH permite root"; fi
 
+# Isolamento dos agentes (ADR-0008): o usuário dos agentes existe, não tem
+# sudo nem Docker e não lê o home do operador.
+agent_user="${CDW_AGENT_USER:-agent}"
+if id "$agent_user" >/dev/null 2>&1; then
+	agent_groups="$(id -nG "$agent_user")"
+	if grep -qwE 'sudo|docker' <<<"$agent_groups"; then fail "$agent_user está em grupo privilegiado ($agent_groups)"; else ok "$agent_user sem sudo e sem docker"; fi
+	if sudo -n -u "$agent_user" sudo -n true >/dev/null 2>&1; then fail "$agent_user consegue usar sudo"; else ok "$agent_user não consegue usar sudo"; fi
+	if sudo -n -u "$agent_user" ls "$HOME" >/dev/null 2>&1; then fail "$agent_user lista $HOME"; else ok "$agent_user não lista $HOME"; fi
+	if command -v cdw-agent >/dev/null; then ok "cdw-agent instalado"; else fail "cdw-agent ausente"; fi
+else
+	fail "usuário dos agentes $agent_user não existe"
+fi
+
 echo
 if ((problems > 0)); then
 	echo "Doctor: $problems problema(s)."

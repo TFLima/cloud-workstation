@@ -50,6 +50,18 @@ if [[ -d "$restored_home/work" ]]; then
 	echo "[restore] restaurando ~/work (mescla; não apaga arquivos que não estejam no snapshot)"
 	install -d -m 0755 "$HOME/work"
 	cp -a "$restored_home/work/." "$HOME/work/"
+	# Snapshots de antes do ADR-0008 trazem ~/work 0755 e arquivos do grupo do
+	# operador; o cp -a acima também copia os atributos do diretório "." por cima
+	# dos 2775 do bootstrap. Reaplica o grupo compartilhado, setgid e a ACL
+	# padrão, senão o agente não consegue gravar no que foi restaurado.
+	WORK_GROUP="${CDW_WORK_GROUP:-work}"
+	if getent group "$WORK_GROUP" >/dev/null; then
+		chgrp -R "$WORK_GROUP" "$HOME/work"
+		chmod -R g+rwX "$HOME/work"
+		find "$HOME/work" -type d -exec chmod g+s {} +
+		find "$HOME/work" -type d -exec setfacl -m g::rwx,d:g::rwx {} + 2>/dev/null ||
+			echo "[restore] AVISO: sem suporte a ACL em ~/work; arquivos novos podem ficar só legíveis ao grupo" >&2
+	fi
 else
 	echo "[restore] AVISO: ~/work não está no snapshot" >&2
 fi
@@ -61,6 +73,25 @@ for d in .claude .codex; do
 		cp -a "$restored_home/$d/." "$HOME/$d/"
 	fi
 done
+
+# Estado dos agentes (ADR-0008): volta para o home do usuário dos agentes, mas
+# extraído COMO esse usuário (nunca como root nem como o operador): o conteúdo
+# do snapshot vem de um diretório que o agente controlava, e extraí-lo com os
+# privilégios dele limita qualquer symlink ou caminho forjado ao que ele já pode
+# escrever. O operador só repassa os bytes por stdin.
+AGENT_USER="${CDW_AGENT_USER:-agent}"
+AGENT_HOME="${CDW_AGENT_HOME:-$(getent passwd "$AGENT_USER" | cut -d: -f6 || true)}"
+agent_tar="$(find "$restored_home" -maxdepth 2 -type f -name agent-home.tar 2>/dev/null | head -n1)"
+if [[ -n "$agent_tar" ]]; then
+	if [[ -z "$AGENT_HOME" ]]; then
+		echo "[restore] AVISO: usuário $AGENT_USER não existe nesta VM; estado dos agentes não restaurado" >&2
+	else
+		echo "[restore] restaurando o estado dos agentes em $AGENT_HOME (extraído como $AGENT_USER)"
+		# A leitura do arquivo é do operador (dono da área de preparo), de propósito.
+		# shellcheck disable=SC2024
+		sudo -n -u "$AGENT_USER" tar -xpf - -C "$AGENT_HOME" <"$agent_tar"
+	fi
+fi
 
 COMPOSE_DIR="$HOME/compose"
 running() {

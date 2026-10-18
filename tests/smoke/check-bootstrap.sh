@@ -38,23 +38,75 @@ if [[ -n "$restic_version" ]]; then
 fi
 
 home="$(getent passwd "$user" | cut -d: -f6)"
-npm_prefix="$home/.local/share/cdw-agents"
+agent="${CDW_AGENT_USER:-agent}"
 
-if [[ -x "$npm_prefix/bin/claude" ]]; then pass "claude instalado para $user"; else flunk "claude ausente em $npm_prefix/bin"; fi
-if [[ -x "$npm_prefix/bin/codex" ]]; then pass "codex instalado para $user"; else flunk "codex ausente em $npm_prefix/bin"; fi
+echo "isolamento dos agentes (ADR-0008):"
+if id "$agent" >/dev/null 2>&1; then pass "usuário $agent existe"; else flunk "usuário $agent ausente"; fi
+agent_home="$(getent passwd "$agent" | cut -d: -f6)"
+agent_groups="$(id -nG "$agent")"
+if tr ' ' '\n' <<<"$agent_groups" | grep -qxE 'sudo|docker'; then flunk "$agent em grupo privilegiado ($agent_groups)"; else pass "$agent fora dos grupos sudo e docker"; fi
+if sudo -u "$agent" sudo -n true >/dev/null 2>&1; then flunk "$agent consegue usar sudo"; else pass "$agent não consegue usar sudo"; fi
+if sudo -u "$agent" docker info >/dev/null 2>&1; then flunk "$agent acessa o daemon do Docker"; else pass "$agent não acessa o daemon do Docker"; fi
+assert_status "700" "$(stat -c '%a' "$agent_home")" "home de $agent é privado (0700)"
+assert_status "711" "$(stat -c '%a' "$home")" "home de $user só atravessável (0711)"
+# Caminhos absolutos: este script roda como o usuário do CI, e o sudo pode
+# manter o HOME dele em vez do HOME do usuário de destino.
+sudo -u "$user" sh -c "echo segredo > '$home/segredo-teste' && chmod 0600 '$home/segredo-teste'"
+if sudo -u "$agent" cat "$home/segredo-teste" >/dev/null 2>&1; then
+	flunk "$agent lê arquivo 0600 de $user"
+	sudo ls -ln "$home/segredo-teste" || true
+	sudo -u "$agent" id || true
+else
+	pass "$agent não lê arquivo 0600 de $user"
+fi
+if sudo -u "$agent" ls "$home" >/dev/null 2>&1; then flunk "$agent lista o home de $user"; else pass "$agent não lista o home de $user"; fi
+sudo -u "$user" rm -f "$home/segredo-teste"
+if sudo -u "$user" ls "$agent_home" >/dev/null 2>&1; then flunk "$user lista o home de $agent sem sudo"; else pass "$user não lista o home de $agent sem sudo"; fi
+
+# ~/work é compartilhado: cada um grava e o outro continua editando.
+sudo -u "$user" sh -c "echo do-operador > '$home/work/do-operador.txt'"
+sudo -u "$agent" sh -c "echo do-agente > '$home/work/do-agente.txt'" || true
+if sudo -u "$agent" sh -c "echo mais >> '$home/work/do-operador.txt'" 2>/dev/null; then pass "$agent edita arquivo criado por $user em ~/work"; else flunk "$agent não edita arquivo criado por $user em ~/work"; fi
+if sudo -u "$user" sh -c "echo mais >> '$home/work/do-agente.txt'" 2>/dev/null; then pass "$user edita arquivo criado por $agent em ~/work"; else flunk "$user não edita arquivo criado por $agent em ~/work"; fi
+sudo -u "$user" rm -f "$home/work/do-operador.txt" "$home/work/do-agente.txt"
+
+if ((TESTS_FAILED > 0)); then
+	echo "diagnóstico do isolamento:"
+	sudo -u "$agent" id || true
+	sudo -u "$agent" sh -c 'echo "HOME do agente sob sudo: $HOME"' || true
+	sudo -u "$user" sh -c 'echo "HOME do operador sob sudo: $HOME"' || true
+	sudo ls -ld "$home" "$home/work" "$agent_home" || true
+	sudo ls -la "$home" || true
+	sudo getfacl -p "$home/work" || true
+fi
+
+echo "agentes instalados:"
+npm_prefix="$agent_home/.local/share/cdw-agents"
+assert_status "$agent" "$(sudo stat -c '%U' "$agent_home/.local")" "o diretório .local de $agent pertence a $agent"
+if sudo test -x "$npm_prefix/bin/claude"; then pass "claude instalado para $agent"; else flunk "claude ausente em $npm_prefix/bin"; fi
+if sudo test -x "$npm_prefix/bin/codex"; then pass "codex instalado para $agent"; else flunk "codex ausente em $npm_prefix/bin"; fi
 if [[ -L /usr/local/bin/node ]]; then pass "node symlinkado em /usr/local/bin (o codex é um script \"env node\")"; else flunk "node ausente em /usr/local/bin"; fi
-# /usr/local/bin (não um rc de shell): precisa funcionar também num comando
-# não interativo e não-login via "ssh host comando". Roda de verdade (não só
-# "command -v"), porque um "env node" sem node no PATH resolve mas falha ao
-# executar.
-for agent in claude codex; do
-	resolved="$(sudo -u "$user" env -i "PATH=/usr/local/bin:/usr/bin:/bin" sh -c "command -v $agent" 2>/dev/null || true)"
-	assert_status "/usr/local/bin/$agent" "$resolved" "$agent resolvido via /usr/local/bin num shell não interativo"
-	output="$(sudo -u "$user" env -i "PATH=/usr/local/bin:/usr/bin:/bin" "HOME=$home" sh -c "$agent --version" 2>&1 || true)"
-	if [[ "$output" != *"No such file or directory"* && -n "$output" ]]; then
-		pass "$agent --version roda num shell não interativo (saída: $output)"
+if [[ -x /usr/local/bin/cdw-agent ]]; then pass "cdw-agent instalado"; else flunk "cdw-agent ausente"; fi
+
+# O operador chama os agentes pelo cdw-agent, num comando não interativo e
+# não-login ("ssh host comando"), e roda de verdade (não só "command -v"):
+# um "env node" sem node no PATH resolve mas falha ao executar.
+op_env=(env -i "PATH=/usr/local/bin:/usr/bin:/bin" "HOME=$home")
+# O diretório atual do CI (o checkout) não é acessível ao operador nem ao
+# agente; como numa sessão SSH, o comando começa no home do operador.
+assert_status "$agent" "$(sudo -u "$user" "${op_env[@]}" sh -c 'cd ~/work && cdw-agent id -un' 2>/dev/null || true)" "cdw-agent roda o comando como $agent"
+assert_status "$home/work" "$(sudo -u "$user" "${op_env[@]}" sh -c 'cd ~/work && cdw-agent pwd' 2>/dev/null || true)" "cdw-agent mantém o diretório atual"
+for bin in claude codex; do
+	if sudo -u "$user" "${op_env[@]}" sh -c "command -v $bin" >/dev/null 2>&1; then
+		flunk "$bin resolve direto para $user (deveria exigir cdw-agent)"
 	else
-		flunk "$agent --version falhou num shell não interativo: ${output:-<vazio>}"
+		pass "$bin não resolve direto para $user"
+	fi
+	output="$(sudo -u "$user" "${op_env[@]}" sh -c "cd ~/work && cdw-agent $bin --version" 2>&1 || true)"
+	if [[ "$output" != *"No such file or directory"* && -n "$output" ]]; then
+		pass "cdw-agent $bin --version roda num shell não interativo (saída: $output)"
+	else
+		flunk "cdw-agent $bin --version falhou num shell não interativo: ${output:-<vazio>}"
 	fi
 done
 

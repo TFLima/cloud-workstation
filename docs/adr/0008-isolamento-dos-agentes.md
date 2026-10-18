@@ -1,6 +1,6 @@
 # ADR-0008 — Isolamento dos agentes de programação na VM
 
-- Status: aceito (implementação pendente)
+- Status: aceito e implementado (bootstrap versão 5)
 - Data: 2026-10-18
 - Origem: item 4.5 do relatório de revisão
 
@@ -27,24 +27,30 @@ isso que eles existem.
 ## Opções
 
 ### A. Usuário `agent` separado, sem sudo e sem Docker (escolhida)
-- O bootstrap cria o usuário `agent` sem senha, sem `sudo` e fora do grupo
-  `docker`, e um grupo `work` com `dev` e `agent`. `~/work` passa a ser
-  `/home/dev/work` com dono `dev:work`, modo `2775` (setgid) e `umask 002`
-  para os dois, então os arquivos ficam editáveis por ambos.
-- Os agentes são instalados e executados como `agent`. Um comando
-  `cdw-agent claude` (ou `cdw-agent codex`) roda `sudo -u agent -i` no
-  diretório atual; o operador continua entrando como `dev` pelo VS Code.
-- Os logins (`~/.claude`, `~/.codex`) ficam no `$HOME` de `agent`, modo 750,
-  grupo `dev`, para o backup (que roda como `dev`) conseguir lê-los.
-  `agent` não lê nada de `dev`.
+- O bootstrap cria o usuário `agent` com senha bloqueada, sem `sudo`, fora do
+  grupo `docker` e fora do `AllowUsers` do sshd. Um grupo `work` reúne o
+  operador e `agent`. `~/work` continua em `/home/dev/work`, com dono
+  `dev:work`, modo `2775` (setgid) e ACL padrão `g::rwx`, então os arquivos
+  novos saem graváveis pelo grupo seja qual for o umask de quem os cria. O
+  home do operador passa a `0711`: o agente atravessa até `~/work`, mas não
+  lista nem lê nada fora dele (arquivos sensíveis do operador são `0600`).
+- Os agentes são instalados e executados como `agent`. O comando
+  `cdw-agent claude` (ou `codex`, ou `bash`) roda o comando como `agent` no
+  diretório atual, com o PATH dos agentes; o operador continua entrando como
+  `dev` pelo VS Code. Não há mais `claude`/`codex` em `/usr/local/bin`:
+  digitar `claude` como operador falha em vez de rodar com os privilégios dele.
+- O home de `agent` é `0700`. Os logins (`~/.claude`, `~/.codex`) ficam lá.
+  O backup e o restore rodam como `dev` e usam `sudo` para ler e gravar esses
+  dois diretórios: o backup copia para a área de preparo (removida ao sair) e o
+  restore devolve com o dono `agent` e modo `0700`.
 - Postgres e Redis continuam acessíveis aos agentes em `127.0.0.1`. O que eles
   perdem é controlar contêineres (`docker compose up`, `docker run`). Se isso
   fizer falta, a evolução é Docker rootless só para `agent` (ADR futuro).
 - Para fazer push, o agente usa o próprio token do GitHub (fine-grained, só
   nos repositórios necessários), separado do token do operador.
-- Custo: cerca de 60 linhas no bootstrap e no backup/restore, mais testes no
-  CI (o job `bootstrap` já roda o script de verdade), e um passo extra para
-  abrir o agente.
+- Custo: cerca de 100 linhas no bootstrap, no backup e no restore, mais testes
+  (o job `bootstrap` do CI roda o script de verdade), e o passo extra
+  `cdw-agent` para abrir o agente.
 
 ### B. Sudo com senha e Docker rootless, agentes ainda como `dev`
 - Tira o root fácil: `sudo` passa a pedir senha, e o Docker rootless deixa de
@@ -66,11 +72,23 @@ isso que eles existem.
 **Opção A**, escolhida pelo operador em 2026-10-18. É a única que separa os
 agentes das credenciais do backup e mantém o que eles precisam: o código em
 `~/work` e os bancos em 127.0.0.1. B e C ficam descartadas pelos motivos
-acima. A implementação vem num PR próprio; até lá, os agentes continuam
-rodando como `dev`.
+acima.
 
 ## Consequências
 - `docs/operations.md` passa a mostrar `cdw-agent claude` em vez de `claude`.
 - O backup e o restore passam a ler e gravar os dotfiles em `/home/agent`.
 - O smoke do CI confirma que `agent` não tem sudo, não está em `docker` e
   não lê `/home/dev`.
+- A VM que já existir quando esta versão sair continua com os agentes em
+  `dev`: o `make up` não reaplica o bootstrap (`ignore_changes = [user_data]`).
+  O isolamento vale para VMs criadas depois (`make down` + `make up`).
+
+## Riscos que continuam
+- O agente escreve em `~/work`, que o operador também usa. Um agente
+  comprometido pode plantar um script, um hook do Git ou uma tarefa do VS Code
+  que o operador depois executa como `dev`. Revise o que o agente deixa em
+  `~/work` antes de rodar, como faria com código de terceiros.
+- O agente alcança a internet e os bancos em 127.0.0.1; o que ele lê de lá, ou
+  de `~/work`, pode ser enviado para fora.
+- O operador continua com `sudo` sem senha: o ganho é separar os agentes dele,
+  não proteger o operador de si mesmo.
