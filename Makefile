@@ -9,7 +9,7 @@ TF ?= $(shell command -v tofu >/dev/null 2>&1 && echo tofu || echo terraform)
 TF_DIR := infrastructure/terraform
 SH_FILES := $(shell find scripts tests -name '*.sh' -type f | sort)
 
-.PHONY: help init plan up status connect connect-print destroy-vm deploy backup down restore doctor \
+.PHONY: help init plan up status connect connect-print destroy-vm deploy backup down restore doctor audit \
 	lint lint-sh lint-yaml lint-tf validate validate-tf validate-compose test check
 
 help: ## Lista os alvos disponíveis
@@ -43,7 +43,7 @@ deploy: ## Sobe/atualiza stacks Docker na VM pelos perfis (CDW_COMPOSE_PROFILES)
 backup: ## Dump + snapshot restic criptografado (destino em RESTIC_REPOSITORY)
 	@bash scripts/backup.sh
 
-down: ## (Fase 5) Backup, confirmação e destruição segura
+down: ## Backup verificado + auditoria de custo + confirmação + destruição
 	@bash scripts/destroy-safe.sh
 
 restore: ## Restaura o snapshot restic na VM atual (pede confirmação)
@@ -51,6 +51,9 @@ restore: ## Restaura o snapshot restic na VM atual (pede confirmação)
 
 doctor: ## Diagnóstico de SSH, Docker, disco, memória, rede e portas
 	@bash scripts/doctor.sh
+
+audit: ## Lista recursos na Hetzner com o rótulo do projeto (achar órfãos)
+	@bash scripts/audit.sh
 
 ## --- Qualidade (sem provisionar nada) ---
 lint: lint-sh lint-yaml lint-tf ## Roda todos os linters

@@ -42,6 +42,12 @@ assert_status 1 "$status" "falha quando nenhuma opção está disponível"
 
 assert_status "0.5000" "$(hcloud_ipv4_monthly nbg1)" "preço do IPv4 lido de /pricing"
 
+HCLOUD_TOKEN="$(printf 'a%.0s' {1..64})"
+assert_status "$(printf 'firewalls 222 cdw-fw\nservers 111 cdw')" "$(hcloud_list_labeled | sort)" "auditoria lista recursos rotulados (volumes/ssh_keys/images/primary_ips vazios)"
+
+assert_status "9" "$(hcloud_elapsed_hours 2026-10-18T00:00:00Z 2026-10-18T08:30:00Z)" "horas decorridas arredondam para cima (8h30 -> 9h)"
+assert_status "8" "$(hcloud_elapsed_hours 2026-10-18T00:00:00Z 2026-10-18T08:00:00Z)" "horas decorridas exatas não arredondam (8h -> 8h)"
+
 HCLOUD_TOKEN="$(printf 'b%.0s' {1..64})"
 assert_status "indisponivel erro-na-api" "$(hcloud_check_type cpx42 nbg1 2>/dev/null)" "token recusado vira erro claro"
 

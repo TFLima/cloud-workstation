@@ -39,6 +39,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, {"server_types": []})
         elif url.path == "/v1/pricing":
             path = os.path.join(FIXTURES, "pricing.json")
+        elif url.path.startswith("/v1/") and url.path[len("/v1/"):] in (
+            "servers",
+            "firewalls",
+            "ssh_keys",
+            "primary_ips",
+            "volumes",
+            "images",
+        ):
+            kind = url.path[len("/v1/"):]
+            path = os.path.join(FIXTURES, f"{kind}.json")
+            if not os.path.exists(path):
+                return self._send(200, {kind: []})
         else:
             return self._send(404, {"error": {"code": "not_found"}})
         with open(path) as fh:

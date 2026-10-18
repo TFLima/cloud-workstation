@@ -63,3 +63,29 @@ hcloud_ipv4_monthly() {
 		[.pricing.primary_ips[]? | select(.type == "ipv4") | .prices[]? | select(.location == $loc)][0].price_monthly.net // empty' ||
 		true
 }
+
+# Lista recursos na Hetzner com o rótulo informado (padrão: o rótulo de
+# projeto deste repositório), um por linha: "<tipo> <id> <nome>". Cobre
+# volumes/imagens(snapshots) mesmo não sendo usados no desenho atual
+# (ADR-0003/backups=false), como rede de segurança contra algo criado fora
+# do OpenTofu (ex.: manualmente no console). Vazio se não houver nenhum.
+hcloud_list_labeled() {
+	local label="${1:-project=cloud-dev-workstation}" kind
+	for kind in servers firewalls ssh_keys primary_ips volumes images; do
+		hcloud_get "/$kind?label_selector=$label" 2>/dev/null |
+			jq -r --arg k "$kind" '.[$k][]? | "\($k) \(.id) \(.name)"' 2>/dev/null || true
+	done
+}
+
+# Horas decorridas desde um timestamp ISO8601 UTC até agora (ou até $2, só
+# para teste), arredondadas para cima como a Hetzner cobra.
+hcloud_elapsed_hours() {
+	local created_iso="$1" ref="${2:-}" now created
+	if [[ -n "$ref" ]]; then
+		now="$(date -u -d "$ref" +%s)" || return 1
+	else
+		now="$(date -u +%s)"
+	fi
+	created="$(date -u -d "$created_iso" +%s)" || return 1
+	awk -v n="$now" -v c="$created" 'BEGIN { h = (n - c) / 3600; printf "%d\n", (h == int(h) ? h : int(h) + 1) }'
+}

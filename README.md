@@ -4,10 +4,10 @@ Ambiente de desenvolvimento remoto **efêmero e reproduzível** na Hetzner Cloud
 a VM é criada sob demanda, usada via VS Code Remote SSH e destruída após um
 backup externo verificado. Nada depende de snapshots do provedor.
 
-> Estado atual: **Fase 4 (persistência e backup)**. `plan`, `up`, `status`,
-> `connect`, `doctor`, `deploy`, `backup` e `restore` funcionam; `down`
-> (backup + destruição) vem na fase 5. Até lá, `make destroy-vm` destrói a
-> VM sem backup.
+> Estado atual: **Fase 5 (ciclo de vida e custos)**. Todos os comandos do
+> plano original funcionam: `plan`, `up`, `status`, `connect`, `doctor`,
+> `deploy`, `backup`, `restore`, `down` e `audit`. Falta a Fase 6
+> (validação ponta a ponta contra infraestrutura real).
 
 ## Pré-requisitos (notebook Windows + WSL2 Ubuntu)
 - VS Code com a extensão Remote - SSH (Windows).
@@ -34,7 +34,8 @@ make init                                # valida tudo sem imprimir segredos
 | `make status` / `connect` / `connect-print` | Estado da VM, SSH e bloco para o VS Code | 2 ✅ |
 | `make deploy` | Stacks Docker por perfil (`tools`/`db`/`cache`/`full`) na VM | 3 ✅ |
 | `make backup` / `restore` | Backup restic criptografado (fora da Hetzner) e restauração | 4 ✅ |
-| `make down` | Backup + confirmação + destruição segura | 5 |
+| `make down` | Backup verificado + auditoria de custo + confirmação + destruição | 5 ✅ |
+| `make audit` | Lista recursos na Hetzner com o rótulo do projeto (achar órfãos) | 5 ✅ |
 | `make doctor` | Diagnóstico de SSH, Docker, disco, memória, rede e portas | 2 ✅ |
 
 ## Documentação
@@ -45,7 +46,8 @@ make init                                # valida tudo sem imprimir segredos
   [`docs/phase-1-report.md`](docs/phase-1-report.md),
   [`docs/phase-2-report.md`](docs/phase-2-report.md),
   [`docs/phase-3-report.md`](docs/phase-3-report.md),
-  [`docs/phase-4-report.md`](docs/phase-4-report.md)
+  [`docs/phase-4-report.md`](docs/phase-4-report.md),
+  [`docs/phase-5-report.md`](docs/phase-5-report.md)
 
 ## Regras de segurança
 - Nenhum segredo no Git, no estado, em imagens ou em logs.
