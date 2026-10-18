@@ -29,8 +29,8 @@
 | cloud-init renderizado com `templatefile` + `cloud-init schema` (11 asserções) | local | OK |
 | Preflight (13 asserções) e regras do repositório (8) | local | OK |
 | `make plan` ponta a ponta contra API falsa: escolheu cpx42 com cx43 sem estoque, plano de 3 recursos, estimativa exibida; token ausente do plano salvo | local | OK |
-| Bootstrap real 2x em Ubuntu 24.04 (runner do GitHub) + verificação de estado | CI | ver PR |
-| OpenTofu 1.13.1 fmt/validate | CI | ver PR |
+| Bootstrap real 2x em Ubuntu 24.04 (runner do GitHub e container local) + verificação de estado (18 asserções); a 1ª rodada no CI achou e corrigiu a falta de `/run/sshd` | CI + local | OK |
+| OpenTofu 1.13.1 fmt/validate e testes | CI | OK |
 
 ## Não validado (e por quê)
 - `make up`, `status`, `connect`, `doctor` e `destroy-vm` contra a Hetzner real:
