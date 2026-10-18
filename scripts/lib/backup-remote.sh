@@ -52,20 +52,28 @@ fi
 # e os dotfiles dos agentes entram no snapshot mesmo assim (make down depende
 # deste backup para não exigir CDW_SKIP_BACKUP=1).
 # Estado dos agentes (ADR-0008): vive no home do usuário dos agentes, que é
-# privado. O operador (com sudo) copia para a área de preparo, de onde o restic
-# o envia junto com o resto; a cópia some com o trap de saída.
+# privado e controlado por ele. O tar roda COMO o usuário dos agentes (nunca como
+# root): um symlink plantado em ~/.claude só alcança o que o próprio agente já
+# lê. O resultado vai para a área de preparo como um único arquivo, sem ser
+# extraído aqui; o restic o envia junto com o resto e a cópia some ao sair.
 AGENT_USER="${CDW_AGENT_USER:-agent}"
 AGENT_HOME="${CDW_AGENT_HOME:-$(getent passwd "$AGENT_USER" | cut -d: -f6 || true)}"
 stage_agent_state() {
-	local d found=()
+	local d found=() rc=0
 	[[ -n "$AGENT_HOME" ]] || return 0
 	for d in .claude .codex; do
-		if sudo -n test -e "$AGENT_HOME/$d"; then found+=("$d"); fi
+		if sudo -n -u "$AGENT_USER" test -e "$AGENT_HOME/$d"; then found+=("$d"); fi
 	done
 	((${#found[@]})) || return 0
 	echo "[backup] copiando o estado dos agentes ($AGENT_USER): ${found[*]}"
-	install -d -m 0700 "$STAGE/agent-home"
-	sudo -n tar -C "$AGENT_HOME" -cf - "${found[@]}" | tar -xf - -C "$STAGE/agent-home"
+	# O redirecionamento é do operador (dono da área de preparo), de propósito.
+	# shellcheck disable=SC2024
+	sudo -n -u "$AGENT_USER" tar -C "$AGENT_HOME" -cf - "${found[@]}" >"$STAGE/agent-home.tar" || rc=$?
+	# 1 = "arquivo mudou durante a leitura" (o agente pode estar rodando); 2+ = erro.
+	((rc <= 1)) || {
+		echo "[backup] ERRO: não foi possível copiar o estado dos agentes (tar saiu com $rc)" >&2
+		return 1
+	}
 }
 
 COMPOSE_DIR="$HOME/compose"

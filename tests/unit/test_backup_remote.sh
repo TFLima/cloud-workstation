@@ -21,7 +21,7 @@ snapshots) [[ " $* " == *" --json "* ]] && echo '[{"time":"2026-10-18T00:00:00Z"
 backup)
 	for p in "$@"; do
 		[[ -f "$p/manifest.json" ]] && cp "$p/manifest.json" "$CDW_TEST_MANIFEST"
-		[[ -d "$p/agent-home" ]] && cp -a "$p/agent-home" "$CDW_TEST_AGENT_COPY"
+		[[ -f "$p/agent-home.tar" ]] && cp "$p/agent-home.tar" "$CDW_TEST_AGENT_COPY"
 	done
 	;;
 esac
@@ -33,10 +33,13 @@ echo "docker $*" >>"$CDW_TEST_LOG"
 [[ "$1" == "--version" ]] && echo "Docker version 29.9.1"
 exit 0
 STUB
-# sudo falso: ignora -n e executa o comando; o teste não troca de usuário.
+# sudo falso: registra o usuário pedido (-u), ignora as opções e executa o
+# comando; o teste não troca de usuário de verdade.
 cat >"$TMP/bin/sudo" <<'STUB'
 #!/usr/bin/env bash
-[[ "${1:-}" == "-n" ]] && shift
+while [[ "${1:-}" == -* ]]; do
+	if [[ "$1" == "-u" ]]; then echo "sudo -u $2" >>"$CDW_TEST_LOG"; shift 2; else shift; fi
+done
 exec "$@"
 STUB
 chmod +x "$TMP/bin/restic" "$TMP/bin/docker" "$TMP/bin/sudo"
@@ -71,11 +74,31 @@ assert_contains "$log" "restic check" "verifica a integridade"
 assert_not_contains "$log" "docker compose" "não chama o Compose"
 assert_status "[]" "$(jq -c .dumps "$TMP/manifest.json")" "manifesto lista dumps vazio como []"
 assert_contains "$out" "copiando o estado dos agentes" "avisa que copiou o estado dos agentes"
-if [[ -f "$TMP/agent-copy/.claude/.credentials.json" ]]; then pass "snapshot inclui ~/.claude do usuário dos agentes"; else flunk "snapshot sem ~/.claude do usuário dos agentes"; fi
-if [[ -d "$TMP/agent-copy/.codex" ]]; then pass "snapshot inclui ~/.codex do usuário dos agentes"; else flunk "snapshot sem ~/.codex do usuário dos agentes"; fi
+agent_listing="$(tar -tf "$TMP/agent-copy" 2>/dev/null || true)"
+assert_contains "$agent_listing" ".claude/.credentials.json" "snapshot inclui o .claude do usuário dos agentes"
+assert_contains "$agent_listing" ".codex/" "snapshot inclui o .codex do usuário dos agentes"
+assert_contains "$log" "sudo -u agent" "lê o estado dos agentes COMO o usuário dos agentes"
+if compgen -G "$TMP/home/.cdw-backup-stage.*" >/dev/null; then flunk "área de preparo ficou na VM"; else pass "área de preparo (com o estado dos agentes) apagada ao sair"; fi
 assert_contains "$log" "restic backup $TMP/home/.cdw-state-upload --tag cdw-state" "copia o estado OpenTofu com a tag cdw-state"
 if [[ -e "$TMP/home/.cdw-backup.env" ]]; then flunk "credenciais ficaram na VM"; else pass "credenciais apagadas ao sair"; fi
 if [[ -e "$TMP/home/.cdw-state-upload" ]]; then flunk "cópia do estado ficou na VM"; else pass "cópia do estado apagada ao sair"; fi
+
+echo "symlink plantado pelo agente:"
+
+# Um agente comprometido troca ~/.claude por um symlink para o home do operador.
+# O tar guarda o link como link e não o segue.
+mkdir -p "$TMP/alvo-do-operador"
+echo credenciais-do-operador >"$TMP/alvo-do-operador/segredo-do-alvo"
+rm -rf "$TMP/agent/.claude"
+ln -s "$TMP/alvo-do-operador" "$TMP/agent/.claude"
+write_env full
+rm -rf "$TMP/agent-copy"
+status=0
+out="$(run_remote)" || status=$?
+assert_status 0 "$status" "termina com sucesso"
+agent_listing="$(tar -tvf "$TMP/agent-copy" 2>/dev/null || true)"
+assert_contains "$agent_listing" ".claude -> $TMP/alvo-do-operador" "guarda o symlink como symlink"
+assert_not_contains "$agent_listing" "segredo-do-alvo" "não segue o symlink para dentro do alvo"
 
 echo "só o estado (make up):"
 
