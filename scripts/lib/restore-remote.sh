@@ -94,7 +94,17 @@ fi
 if [[ -n "$redis_dump_file" ]]; then
 	if running redis; then
 		echo "[restore] restaurando Redis de $(basename "$redis_dump_file")"
-		(cd "$COMPOSE_DIR" && docker compose cp "$redis_dump_file" redis:/data/dump.rdb && docker compose restart redis)
+		# "stop" (não "restart"): o Redis salva um RDB final ao receber
+		# SIGTERM, o que sobrescreveria o dump.rdb copiado se a cópia
+		# acontecesse antes do processo realmente parar. Parar primeiro,
+		# copiar com o processo já parado e só então iniciar evita a corrida
+		# (testado neste sandbox com um container Redis real). O Compose roda
+		# o Redis sem AOF (só RDB; ver comentário em docker/compose.yaml), já
+		# que com AOF ligado o restart recarrega o AOF em vez do RDB copiado.
+		(cd "$COMPOSE_DIR" &&
+			docker compose stop redis &&
+			docker compose cp "$redis_dump_file" redis:/data/dump.rdb &&
+			docker compose start redis)
 	else
 		install -d -m 0700 "$PENDING_DIR"
 		cp -a "$redis_dump_file" "$PENDING_DIR/"

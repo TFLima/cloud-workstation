@@ -62,7 +62,13 @@ services:
   redis:
     image: redis:7.4-bookworm
     profiles: ["cache", "full"]
-    command: ["redis-server", "--appendonly", "yes"]
+    # Sem "--appendonly yes": só RDB (pontos de "save" padrão da imagem).
+    # O backup (scripts/lib/backup-remote.sh) já faz "SAVE" + copia o
+    # dump.rdb; com AOF ligado, um restore (restaurar o dump.rdb e reiniciar)
+    # é ignorado, porque o Redis recarrega o AOF existente em vez do RDB
+    # copiado (achado real de revisão no PR da Fase 4) — testado neste
+    # sandbox com um container Redis real. RDB puro é consistente com o
+    # próprio método de backup usado aqui.
     ports:
       - "127.0.0.1:6379:6379"
     volumes:

@@ -38,6 +38,48 @@ alternativa (`docs/costs.md`, ADR-0003) — trocar é só reconfigurar
   `~/restore-pending/` para aplicação manual. Compara o `bootstrap_version`
   do manifesto do snapshot com o da VM atual e **avisa sem bloquear** em
   caso de divergência (tratamento de incompatibilidade de versões).
+
+## Achados da revisão automática (Codex) no PR #3
+Depois de abrir o PR, a revisão automática encontrou 3 problemas reais,
+todos corrigidos e **reproduzidos de verdade neste sandbox** (não só lidos)
+antes da correção, com um novo teste ponta a ponta confirmando cada um:
+1. **Retenção nunca podava nada (P1)**: `restic forget` agrupa por
+   `host,paths` por padrão; a área de preparo (`$STAGE`, via `mktemp`) tem
+   um caminho diferente a cada execução, então cada snapshot virava seu
+   próprio grupo de 1 — `--keep-daily`/`--keep-weekly`/`--keep-monthly`
+   nunca tinha efeito. Reproduzido: dois backups seguidos mostravam dois
+   grupos de "keep 1 snapshots" separados. Corrigido com
+   `--group-by host,tags` (ignora o caminho); confirmado depois que os dois
+   snapshots passaram a aparecer num único grupo. A mesma causa afetava a
+   própria linha final de `backup-remote.sh` que imprime o snapshot
+   "concluído" (`restic snapshots --latest 1` sofre do mesmo agrupamento
+   por padrão) — corrigida para ordenar por data em vez de usar `--latest`.
+2. **Restore do Redis não restaurava nada (P1)**: o Compose roda o Redis
+   com `--appendonly yes`; copiar o `dump.rdb` e reiniciar não adianta
+   porque o Redis recarrega o AOF existente, não o RDB copiado — reproduzido
+   literalmente (inseri uma chave, fiz backup, inseri outra chave depois,
+   restaurei, e a chave "nova" continuava lá, a do backup não voltava).
+   Tentei primeiro remover o `appendonlydir` antes do restart: ainda assim o
+   Redis não carregou o RDB copiado com AOF habilitado via flag de linha de
+   comando (resultado: banco vazio). A causa raiz real, também descoberta
+   testando: mesmo sem AOF, um `docker compose restart` manda SIGTERM, e o
+   Redis salva um RDB final no desligamento — **sobrescrevendo** o
+   `dump.rdb` recém-copiado antes do processo realmente reiniciar. Correção
+   final, confirmada com um teste real completo (Postgres + Redis + volume
+   de projetos): `docker/compose.yaml` não liga mais `--appendonly` (fica
+   consistente com o próprio método de backup, que já é baseado em
+   `SAVE`/RDB), e `restore-remote.sh` passou a fazer
+   `docker compose stop redis && docker compose cp ... && docker compose
+   start redis` (nunca `restart`), para a cópia acontecer só depois do
+   processo parar de vez.
+3. **`apt-mark hold` do restic não rodava se a versão já batesse (P2)**:
+   numa VM que já tivesse o restic na versão certa (ex.: upgrade de uma
+   Fase anterior, ou — como neste próprio sandbox — a versão já vinha
+   pré-instalada), o `apt-mark hold` ficava dentro do `if` de instalação e
+   nunca era chamado, deixando o pacote exposto a `unattended-upgrades`.
+   Reproduzido retirando o hold manualmente e rodando o bootstrap de novo
+   sem forçar reinstalação. Corrigido: o `apt-mark hold` agora roda
+   incondicionalmente, fora do `if`.
 - `.env.example`, `docs/operations.md`, `README.md` e `docs/adr/0003-...`
   atualizados; `Makefile` com a descrição real de `backup`/`restore`.
 
@@ -65,6 +107,10 @@ Ao montar um ambiente local (Postgres + Redis via Compose) para testar
 | `make check` (shellcheck, shfmt, yamllint, `tofu fmt`/`validate`, `docker compose config` em todos os perfis, suíte de testes) | local | OK |
 | `scripts/bootstrap.sh` 3x (idempotência, incluindo forçar um downgrade manual do restic para provar que o `step_restic` reinstala e re-retém a versão fixada) + `tests/smoke/check-bootstrap.sh` (com a nova checagem de versão/hold do restic) | local (usuário `dev` simulando o runner do CI) | OK |
 | **Backup e restore ponta a ponta**: `docker compose --profile db --profile cache up -d` local (Postgres/Redis reais), dados de teste inseridos (tabela, chave Redis, arquivo em `~/work`), `backup-remote.sh` rodado contra um repositório restic **local** (backend de arquivo, não R2 — sem credenciais reais disponíveis nesta sessão; a lógica do restic para S3 é a mesma, só a URL/credenciais mudam), dados apagados, `restore-remote.sh` rodado e os três dados confirmados restaurados (`SELECT` no Postgres, `GET` no Redis, conteúdo do arquivo) | local (Docker real) | OK |
+| **Re-teste ponta a ponta após as correções da revisão do Codex** (achados #1 e #2 abaixo): novo ciclo completo backup → apagar tudo → restore com Postgres + Redis + `~/work` reais, usando o `restore-remote.sh` corrigido (`stop`/`cp`/`start` do Redis, sem AOF); os três dados voltaram corretamente | local (Docker real) | OK |
+| **Retenção do restic (`--group-by host,tags`)**: dois `backup-remote.sh` seguidos contra o mesmo repositório local; confirmado que os dois snapshots passam a aparecer agrupados (antes da correção, cada um virava seu próprio grupo de 1, por causa do caminho aleatório da área de preparo) | local (restic real) | OK |
+| **Relato do "último snapshot" (`sort_by(.time) \| last`)**: com dois snapshots no repositório, o comando antigo (`--latest 1`) devolvia os dois (grupos diferentes) e `.[0]` podia pegar o mais antigo; o comando corrigido devolveu só o mais recente de verdade | local (restic real) | OK |
+| **`apt-mark hold` incondicional do restic**: `apt-mark unhold restic` manual seguido de `bootstrap.sh` sem forçar reinstalação (versão já batia); confirmado que o hold é reaplicado mesmo sem reinstalar (antes da correção, ficaria sem hold neste cenário) | local (sandbox com restic pré-instalado) | OK |
 | Suíte de testes já existente (cloud-init, destroy-vars, hcloud, preflight, criptografia do estado, regras do repositório) | local | OK, sem regressão |
 
 ## Não validado (e por quê)

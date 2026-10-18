@@ -87,8 +87,11 @@ step_restic() {
 	if [[ "$current" != "$RESTIC_VERSION" ]]; then
 		log "instalando restic=$RESTIC_VERSION"
 		apt-get install -y --no-install-recommends --allow-downgrades --allow-change-held-packages "restic=$RESTIC_VERSION"
-		apt-mark hold restic >/dev/null
 	fi
+	# Fora do "if": numa VM de uma Fase anterior, o restic pode já estar na
+	# versão certa mas sem hold (instalado solto antes desta Fase); sem isso,
+	# unattended-upgrades poderia tirá-lo da versão fixada de qualquer jeito.
+	apt-mark hold restic >/dev/null
 }
 
 step_docker() {

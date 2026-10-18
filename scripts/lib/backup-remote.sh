@@ -84,7 +84,11 @@ echo "[backup] enviando snapshot"
 restic backup "${backup_paths[@]}" --tag cdw --host "$(hostname)"
 
 echo "[backup] retenção (forget --prune)"
-restic forget --prune \
+# --group-by host,tags (não o padrão "host,paths"): a área de preparo em
+# backup_paths tem um nome aleatório (mktemp) a cada execução, então agrupar
+# por caminho faria cada snapshot virar seu próprio grupo de 1 e a retenção
+# nunca podaria nada.
+restic forget --prune --group-by host,tags \
 	--keep-daily "${CDW_BACKUP_KEEP_DAILY:-7}" \
 	--keep-weekly "${CDW_BACKUP_KEEP_WEEKLY:-4}" \
 	--keep-monthly "${CDW_BACKUP_KEEP_MONTHLY:-6}"
@@ -92,5 +96,8 @@ restic forget --prune \
 echo "[backup] verificação de integridade (amostra de 5% dos dados)"
 restic check --read-data-subset=5%
 
-short_id="$(restic snapshots --tag cdw --host "$(hostname)" --latest 1 --json | jq -r '.[0].short_id // "?"')"
+# Não "snapshots --latest 1": por padrão agrupa por host+paths, e o caminho
+# da área de preparo muda a cada execução (mktemp) — "--latest 1" devolveria
+# um snapshot por grupo, não só o mais recente de verdade. Ordena por data.
+short_id="$(restic snapshots --tag cdw --host "$(hostname)" --json | jq -r 'sort_by(.time) | last.short_id // "?"')"
 echo "[backup] concluído: snapshot $short_id"
