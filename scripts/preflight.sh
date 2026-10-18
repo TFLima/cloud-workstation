@@ -74,6 +74,8 @@ pass_file="$(expand_path "${CDW_STATE_PASSPHRASE_FILE:-~/.config/cdw/state-passp
 if [[ -f "$pass_file" ]]; then
 	mode="$(file_mode "$pass_file")"
 	if [[ "${mode: -2}" == "00" ]]; then ok "arquivo da passphrase do estado protegido"; else fail "passphrase do estado com permissão $mode; use chmod 600"; fi
+	pass_len="$(head -n1 "$pass_file" | tr -d '\n' | wc -c)"
+	if ((pass_len < 16)); then fail "passphrase do estado com menos de 16 caracteres"; fi
 else
 	fail "arquivo da passphrase do estado não encontrado (CDW_STATE_PASSPHRASE_FILE)"
 fi

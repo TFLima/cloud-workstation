@@ -12,8 +12,14 @@
 - Provider `hetznercloud/hcloud` fixado em `= 1.70.0` (última versão encontrada
   em releases.hashicorp.com em 17/10/2026), com `.terraform.lock.hcl` versionado.
 - **Estado local criptografado** com a criptografia nativa do OpenTofu
-  (`key_provider "pbkdf2"` + `method "aes_gcm"`), passphrase vinda de variável de
-  ambiente (`TF_ENCRYPTION`/arquivo ignorado pelo Git), nunca do repositório.
+  (`key_provider "pbkdf2"` + `method "aes_gcm"`, `enforced = true` para estado e
+  plano). A configuração é montada em tempo de execução na variável de ambiente
+  `TF_ENCRYPTION` (scripts/lib/tf.sh) a partir de um arquivo de passphrase com
+  pelo menos 16 caracteres, fora do Git. Assim o código continua válido no
+  Terraform; com Terraform, os scripts recusam operar sem
+  `CDW_ALLOW_UNENCRYPTED_STATE=1`.
+- Backend `local` com caminho passado no `init` (`CDW_STATE_DIR`, padrão
+  `~/.local/state/cdw`), fora do repositório.
 - O arquivo de estado fica no notebook do operador (fora da VM e fora do Git)
   e é copiado, já criptografado, para o mesmo destino externo dos backups após
   cada `make up`/`make down`.

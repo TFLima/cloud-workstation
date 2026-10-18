@@ -1,0 +1,29 @@
+{
+ "server_types": [
+  {
+   "name": "cpx42",
+   "architecture": "x86",
+   "locations": [
+    {
+     "name": "nbg1",
+     "available": true,
+     "recommended": true,
+     "deprecation": null
+    }
+   ],
+   "prices": [
+    {
+     "location": "nbg1",
+     "price_hourly": {
+      "net": "0.1114",
+      "gross": "0.1114"
+     },
+     "price_monthly": {
+      "net": "69.49",
+      "gross": "69.49"
+     }
+    }
+   ]
+  }
+ ]
+}

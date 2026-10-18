@@ -30,8 +30,10 @@ jobs:
           tofu_version_file: .opentofu-version
           tofu_wrapper: false
 
-      - name: Instalar linters
-        run: python3 -m pip install --user -r requirements-dev.txt
+      - name: Instalar linters e cloud-init (para validar o schema)
+        run: |
+          python3 -m pip install --user -r requirements-dev.txt
+          sudo apt-get install -y --no-install-recommends cloud-init
 
       - name: Lint
         run: make lint TF=tofu
@@ -41,3 +43,35 @@ jobs:
 
       - name: Testes
         run: make test
+
+  bootstrap:
+    # Executa o bootstrap real duas vezes num Ubuntu 24.04 descartável (o runner)
+    # para provar idempotência sem criar VM paga. A instalação do Docker é pulada
+    # porque o runner já traz Docker (pacotes moby) que conflitam com docker-ce.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Preparar usuário como o cloud-init faria
+        run: |
+          sudo useradd -m -s /bin/bash dev
+          sudo install -d -m 0755 /etc/cdw
+          printf 'CDW_USER=dev\nCDW_ADMIN_CIDR=203.0.113.10/32\nCDW_BOOTSTRAP_VERSION=ci\n' \
+            | sudo tee /etc/cdw/bootstrap.env >/dev/null
+
+      - name: Bootstrap (1a execução)
+        run: sudo CDW_SKIP_DOCKER_INSTALL=1 bash scripts/bootstrap.sh
+
+      - name: Bootstrap (2a execução, deve ser idempotente)
+        run: |
+          sudo CDW_SKIP_DOCKER_INSTALL=1 bash scripts/bootstrap.sh | tee second-run.log
+          if grep -q 'instalando' second-run.log; then
+            echo "a segunda execução reinstalou pacotes"; exit 1
+          fi
+
+      - name: Verificar estado
+        run: bash tests/smoke/check-bootstrap.sh dev ci

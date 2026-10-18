@@ -1,0 +1,46 @@
+{
+ "server_types": [
+  {
+   "name": "cx43",
+   "architecture": "x86",
+   "locations": [
+    {
+     "name": "nbg1",
+     "available": false,
+     "recommended": false,
+     "deprecation": null
+    },
+    {
+     "name": "fsn1",
+     "available": true,
+     "recommended": true,
+     "deprecation": null
+    }
+   ],
+   "prices": [
+    {
+     "location": "nbg1",
+     "price_hourly": {
+      "net": "0.0256",
+      "gross": "0.0256"
+     },
+     "price_monthly": {
+      "net": "15.99",
+      "gross": "15.99"
+     }
+    },
+    {
+     "location": "fsn1",
+     "price_hourly": {
+      "net": "0.0256",
+      "gross": "0.0256"
+     },
+     "price_monthly": {
+      "net": "15.99",
+      "gross": "15.99"
+     }
+    }
+   ]
+  }
+ ]
+}

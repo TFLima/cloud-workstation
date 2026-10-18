@@ -9,7 +9,7 @@ TF ?= $(shell command -v tofu >/dev/null 2>&1 && echo tofu || echo terraform)
 TF_DIR := infrastructure/terraform
 SH_FILES := $(shell find scripts tests -name '*.sh' -type f | sort)
 
-.PHONY: help init plan up status connect deploy backup down restore doctor \
+.PHONY: help init plan up status connect connect-print destroy-vm deploy backup down restore doctor \
 	lint lint-sh lint-yaml lint-tf validate validate-tf validate-compose test check
 
 help: ## Lista os alvos disponíveis
@@ -19,17 +19,23 @@ help: ## Lista os alvos disponíveis
 init: ## Valida dependências, variáveis e arquivos sem imprimir segredos
 	@bash scripts/preflight.sh
 
-plan: ## (Fase 2) Mostra mudanças de infraestrutura e custo estimado
-	@echo "make plan será implementado na Fase 2." && exit 2
+plan: ## Mostra mudanças de infraestrutura e custo estimado (não cria nada)
+	@bash scripts/plan.sh
 
-up: ## (Fase 2) Cria a VM, firewall e chave SSH
-	@echo "make up será implementado na Fase 2." && exit 2
+up: ## Cria a VM, firewall e chave SSH (pede confirmação; recurso PAGO)
+	@bash scripts/up.sh
 
-status: ## (Fase 2) Mostra IP, estado e saúde da VM
-	@echo "make status será implementado na Fase 2." && exit 2
+status: ## Mostra IP, estado, bootstrap e saúde da VM
+	@bash scripts/status.sh
 
-connect: ## (Fase 2) Mostra/abre o comando SSH seguro
-	@echo "make connect será implementado na Fase 2." && exit 2
+connect: ## Abre uma sessão SSH na VM
+	@bash scripts/connect.sh
+
+connect-print: ## Mostra o comando SSH e o bloco para o VS Code Remote - SSH
+	@bash scripts/connect.sh --print
+
+destroy-vm: ## Destrói a VM SEM backup (pede confirmação digitada)
+	@bash scripts/destroy-vm.sh
 
 deploy: ## (Fase 3) Sobe stacks Docker por perfil
 	@bash scripts/deploy.sh
@@ -43,7 +49,7 @@ down: ## (Fase 5) Backup, confirmação e destruição segura
 restore: ## (Fase 4) Restaura dados em VM nova
 	@bash scripts/restore.sh
 
-doctor: ## (Fase 2) Diagnóstico de SSH, Docker, disco e memória
+doctor: ## Diagnóstico de SSH, Docker, disco, memória, rede e portas
 	@bash scripts/doctor.sh
 
 ## --- Qualidade (sem provisionar nada) ---

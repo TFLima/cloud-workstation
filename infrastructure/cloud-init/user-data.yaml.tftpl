@@ -1,0 +1,32 @@
+#cloud-config
+# Renderizado por OpenTofu (templatefile). Mantém o mínimo aqui: cria o usuário
+# e entrega o bootstrap idempotente (scripts/bootstrap.sh), que faz o resto.
+disable_root: true
+ssh_pwauth: false
+
+users:
+  - name: ${username}
+    gecos: Cloud Dev Workstation
+    shell: /bin/bash
+    groups: [sudo]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+write_files:
+  - path: /etc/cdw/bootstrap.env
+    owner: root:root
+    permissions: "0644"
+    content: |
+      CDW_USER=${username}
+      CDW_ADMIN_CIDR=${admin_cidr}
+      CDW_BOOTSTRAP_VERSION=${bootstrap_version}
+  - path: /usr/local/sbin/cdw-bootstrap
+    owner: root:root
+    permissions: "0755"
+    encoding: b64
+    content: ${bootstrap_b64}
+
+runcmd:
+  - [/usr/local/sbin/cdw-bootstrap]
