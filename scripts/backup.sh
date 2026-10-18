@@ -40,6 +40,14 @@ user="$(tf_output username)"
 
 cdw_ssh "$server_id" "$user@$ip" true 2>/dev/null || die "SSH não respondeu em $ip; confira make status"
 
+# O arquivo de estado já está criptografado pelo OpenTofu (ADR-0002); vai para
+# o mesmo repositório restic com a tag cdw-state (ADR-0007). Vai antes das
+# credenciais: se este envio falhar, nenhum segredo fica na VM sem o trap de
+# limpeza de backup-remote.sh.
+log "enviando o estado OpenTofu criptografado para cópia externa"
+cdw_ssh "$server_id" "$user@$ip" "umask 077 && mkdir -p ~/.cdw-state-upload && cat > ~/.cdw-state-upload/terraform.tfstate" \
+	<"$CDW_STATE_DIR/terraform.tfstate"
+
 log "enviando credenciais do restic por stdin (nunca gravadas localmente nem impressas)"
 {
 	printf 'RESTIC_REPOSITORY=%s\n' "$(shell_quote "$RESTIC_REPOSITORY")"
@@ -52,12 +60,6 @@ log "enviando credenciais do restic por stdin (nunca gravadas localmente nem imp
 	printf 'CDW_BACKUP_KEEP_MONTHLY=%s\n' "$(shell_quote "${CDW_BACKUP_KEEP_MONTHLY:-6}")"
 	printf 'CDW_BACKUP_MODE=%s\n' "$mode"
 } | cdw_ssh "$server_id" "$user@$ip" "umask 077 && cat > ~/.cdw-backup.env"
-
-# O arquivo de estado já está criptografado pelo OpenTofu (ADR-0002); vai para
-# o mesmo repositório restic com a tag cdw-state (ADR-0007).
-log "enviando o estado OpenTofu criptografado para cópia externa"
-cdw_ssh "$server_id" "$user@$ip" "umask 077 && mkdir -p ~/.cdw-state-upload && cat > ~/.cdw-state-upload/terraform.tfstate" \
-	<"$CDW_STATE_DIR/terraform.tfstate"
 
 if [[ "$mode" == "state" ]]; then
 	log "copiando o estado OpenTofu para o repositório restic"
