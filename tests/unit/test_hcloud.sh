@@ -42,6 +42,21 @@ assert_status 1 "$status" "falha quando nenhuma opção está disponível"
 
 assert_status "0.5000" "$(hcloud_ipv4_monthly nbg1)" "preço do IPv4 lido de /pricing"
 
+HCLOUD_TOKEN="$(printf 'a%.0s' {1..64})"
+assert_status "$(printf 'firewalls 222 cdw-fw\nservers 111 cdw')" "$(hcloud_list_labeled | sort)" "auditoria lista recursos rotulados (volumes/ssh_keys/images/primary_ips vazios)"
+
+assert_status "0.0256 15.99" "$(hcloud_type_price cx43 nbg1)" "preço de um tipo sem estoque ainda é lido (servidor já existente continua sendo cobrado)"
+assert_status "" "$(hcloud_type_price zz99 nbg1)" "preço de tipo inexistente vem vazio, sem erro"
+
+set +e
+HCLOUD_TOKEN="$(printf 'b%.0s' {1..64})" hcloud_list_labeled >/dev/null 2>&1
+status=$?
+set -e
+assert_status 1 "$status" "auditoria propaga falha da API (token inválido) em vez de reportar 'nenhum encontrado'"
+
+assert_status "9" "$(hcloud_elapsed_hours 2026-10-18T00:00:00Z 2026-10-18T08:30:00Z)" "horas decorridas arredondam para cima (8h30 -> 9h)"
+assert_status "8" "$(hcloud_elapsed_hours 2026-10-18T00:00:00Z 2026-10-18T08:00:00Z)" "horas decorridas exatas não arredondam (8h -> 8h)"
+
 HCLOUD_TOKEN="$(printf 'b%.0s' {1..64})"
 assert_status "indisponivel erro-na-api" "$(hcloud_check_type cpx42 nbg1 2>/dev/null)" "token recusado vira erro claro"
 

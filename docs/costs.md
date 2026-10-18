@@ -23,8 +23,9 @@ continua sendo cobrado até ser **excluído**.
 
 ## Custo residual após `make down`
 - Hetzner: **€0** se servidor, IPv4 primário e nenhum snapshot/volume restarem.
-  Chave SSH e firewall não são cobrados. `make down` listará recursos com rótulo
-  `project=cloud-dev-workstation` para confirmar.
+  Chave SSH e firewall não são cobrados. `make down` lista recursos com rótulo
+  `project=cloud-dev-workstation` antes e depois de destruir, para confirmar;
+  `make audit` faz a mesma consulta a qualquer momento, sem destruir nada.
 - Backup externo (fora da Hetzner): Cloudflare R2 é gratuito até 10 GB/mês e
   depois ~US$0,015/GB, sem custo de download; Backblaze B2 ~US$0,007/GB/mês
   (valores de terceiros, mecanik.dev; conferir no cadastro).
@@ -33,4 +34,7 @@ continua sendo cobrado até ser **excluído**.
 ## Riscos de custo
 - CX43 frequentemente indisponível → fallback CPX42 custa ~4x mais.
 - Esquecer a VM ligada: no pior caso, o teto mensal do tipo escolhido.
-  Mitigação (Fase 5): rótulo TTL, auditoria `make audit` e alerta.
+  Mitigação (Fase 5, ADR-0006): `make status` mostra o custo estimado da
+  sessão atual e avisa (sem destruir nada) se passar de `CDW_BUDGET_ALERT_EUR`
+  ou do TTL sugerido em `CDW_SESSION_TTL_HOURS`; `make audit`/`make down`
+  conferem recursos órfãos pelo rótulo do projeto.

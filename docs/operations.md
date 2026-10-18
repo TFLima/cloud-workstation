@@ -27,6 +27,8 @@
 | Subir ferramentas/serviços | `make deploy` | Perfis em `CDW_COMPOSE_PROFILES` (padrão `tools`); ver abaixo. |
 | Backup | `make backup` | Dumps + snapshot restic criptografado fora da Hetzner; ver "Backup e restore" abaixo. |
 | Restore | `make restore` | Restaura o snapshot restic na VM atual; pede confirmação. |
+| Destruir com segurança | `make down` | Backup + auditoria + confirmação + destruição; ver "Destruição" abaixo. |
+| Auditoria | `make audit` | Lista recursos na Hetzner com o rótulo do projeto; não destrói nada. |
 
 ## VS Code Remote - SSH (Windows)
 - O VS Code usa o OpenSSH do Windows. A chave privada precisa existir no
@@ -103,13 +105,32 @@ O firewall libera a porta 22 só para o IP detectado (ou `TF_VAR_admin_cidr`).
 Se sua rede mudar, rode `make plan` e `make up` de novo: o OpenTofu atualiza
 apenas a regra de firewall, sem recriar a VM.
 
-## Destruição (até a Fase 5)
-`make down` (backup + destruição) chega na Fase 5. Até lá, para parar a cobrança:
-```bash
-make destroy-vm   # pede que você digite "destruir cdw"
-```
-**Não há backup automático ainda**: tudo o que estiver na VM será perdido.
-Depois, confira no console da Hetzner que não restou servidor nem IP primário.
+## Destruição (ADR-0006)
+- **`make down`** é o caminho recomendado para parar de ser cobrado: faz
+  `make backup` primeiro (interrompe tudo e destrói nada se o backup
+  falhar), mostra os recursos que serão destruídos, uma estimativa do custo
+  que deixa de ser cobrado e uma auditoria por rótulo
+  (`project=cloud-dev-workstation`) direto na API da Hetzner, pede que você
+  digite `destruir <nome>` e só então destrói (VM, firewall, chave SSH e
+  IPv4 primário juntos). Pular o backup: `CDW_SKIP_BACKUP=1 make down` (por
+  sua conta e risco).
+- **`make destroy-vm`** destrói sem fazer backup (ex.: recriar a VM do
+  zero); pede confirmação (`destruir cdw`), mas não verifica nada antes.
+- **`make audit`** lista, a qualquer momento, os recursos na Hetzner com o
+  rótulo do projeto — útil para achar algo que sobrou (criado fora do
+  OpenTofu, ou de uma destruição incompleta). Não destrói nada.
+- Depois de qualquer destruição, confira no console da Hetzner que não
+  restou servidor, IP primário, volume nem snapshot (este desenho não usa
+  volumes/snapshots; ver ADR-0003).
+
+## Guardrails de custo (ADR-0006)
+`make status` mostra, quando a VM existe, as horas decorridas desde a
+criação e uma estimativa do custo da sessão atual. Dois avisos opcionais,
+configuráveis no `.env` local — **nunca destroem nada automaticamente**:
+- `CDW_SESSION_TTL_HOURS`: avisa quando a sessão passa desse número de
+  horas, sugerindo `make down`.
+- `CDW_BUDGET_ALERT_EUR`: avisa quando o custo estimado da sessão atual
+  passa desse valor em EUR.
 
 ## Onde ficam os arquivos locais
 `~/.local/state/cdw/` (`CDW_STATE_DIR`): `terraform.tfstate` (criptografado),
