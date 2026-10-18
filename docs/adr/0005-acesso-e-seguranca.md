@@ -6,7 +6,12 @@
 ## Decisão
 - Firewall de nuvem Hetzner: entrada apenas TCP/22 a partir de `admin_cidr`
   (IP público do operador, /32); ICMP opcional. Sem outras portas.
-- Firewall local (UFW) espelhando a regra, como defesa em profundidade.
+- Firewall local (UFW) como defesa em profundidade: nega toda entrada exceto
+  `22/tcp` (`ufw allow`). A origem não é fixada no UFW, porque o IP do
+  operador muda e o cloud-init não é reaplicado numa VM existente; quem
+  restringe a origem é o firewall de nuvem. Sem `ufw limit`: ele corta um IP
+  que abre 6 conexões em 30 s, e o VS Code Remote - SSH abre várias ao
+  conectar e reconectar.
 - Usuário `dev` não-root com sudo; `PasswordAuthentication no`,
   `PermitRootLogin no`, `KbdInteractiveAuthentication no` aplicados pelo
   cloud-init; fail2ban opcional.

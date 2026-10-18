@@ -268,8 +268,14 @@ step_firewall() {
 	log "ufw: entrada negada exceto SSH"
 	ufw default deny incoming >/dev/null
 	ufw default allow outgoing >/dev/null
-	# O firewall de nuvem restringe a origem ao IP do operador; aqui limitamos taxa.
-	ufw limit 22/tcp comment 'ssh' >/dev/null
+	# O firewall de nuvem já restringe a origem ao IP do operador. Sem "ufw limit":
+	# ele corta um IP que abre 6 conexões em 30 s, e o VS Code Remote - SSH abre
+	# várias ao conectar e reconectar. Também sem fixar o CIDR aqui: o IP do
+	# operador muda, e o cloud-init não é reaplicado numa VM existente.
+	if ufw status | grep -qE '^22/tcp +LIMIT'; then
+		ufw delete limit 22/tcp >/dev/null
+	fi
+	ufw allow 22/tcp comment 'ssh' >/dev/null
 	if ! ufw status | grep -q '^Status: active'; then
 		ufw --force enable >/dev/null
 	fi

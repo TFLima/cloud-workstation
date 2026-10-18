@@ -20,6 +20,8 @@ ufw_status="$(sudo ufw status verbose)"
 assert_contains "$ufw_status" "Status: active" "ufw ativo"
 assert_contains "$ufw_status" "Default: deny (incoming)" "ufw nega entrada por padrão"
 assert_contains "$ufw_status" "22/tcp" "ufw permite SSH"
+if grep -qE '^22/tcp +ALLOW IN' <<<"$ufw_status"; then pass "ufw: SSH em ALLOW"; else flunk "ufw: SSH não está em ALLOW"; fi
+assert_not_contains "$ufw_status" "LIMIT" "ufw sem limite de taxa no SSH (cortaria o VS Code)"
 
 assert_status "version=$version" "$(cat /etc/cdw/bootstrap-version)" "marcador de versão do bootstrap"
 if [[ -d "/home/$user/work" ]]; then pass "diretório ~/work criado"; else flunk "diretório ~/work ausente"; fi

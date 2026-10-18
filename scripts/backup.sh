@@ -8,6 +8,13 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 # shellcheck source=scripts/lib/tf.sh
 source "$CDW_ROOT/scripts/lib/tf.sh"
 
+mode=full
+if [[ "${1:-}" == "--state-only" ]]; then
+	# Usado por make up: só copia o estado OpenTofu, sem snapshot de ~/work,
+	# para não criar um snapshot "cdw" vazio que viraria o latest do restore.
+	mode=state
+fi
+
 cdw_load_config
 
 : "${RESTIC_REPOSITORY:?defina RESTIC_REPOSITORY no .env local (ver docs/adr/0003-persistencia-e-backup.md)}"
@@ -33,6 +40,14 @@ user="$(tf_output username)"
 
 cdw_ssh "$server_id" "$user@$ip" true 2>/dev/null || die "SSH não respondeu em $ip; confira make status"
 
+# O arquivo de estado já está criptografado pelo OpenTofu (ADR-0002); vai para
+# o mesmo repositório restic com a tag cdw-state (ADR-0007). Vai antes das
+# credenciais: se este envio falhar, nenhum segredo fica na VM sem o trap de
+# limpeza de backup-remote.sh.
+log "enviando o estado OpenTofu criptografado para cópia externa"
+cdw_ssh "$server_id" "$user@$ip" "umask 077 && mkdir -p ~/.cdw-state-upload && cat > ~/.cdw-state-upload/terraform.tfstate" \
+	<"$CDW_STATE_DIR/terraform.tfstate"
+
 log "enviando credenciais do restic por stdin (nunca gravadas localmente nem impressas)"
 {
 	printf 'RESTIC_REPOSITORY=%s\n' "$(shell_quote "$RESTIC_REPOSITORY")"
@@ -43,7 +58,15 @@ log "enviando credenciais do restic por stdin (nunca gravadas localmente nem imp
 	printf 'CDW_BACKUP_KEEP_DAILY=%s\n' "$(shell_quote "${CDW_BACKUP_KEEP_DAILY:-7}")"
 	printf 'CDW_BACKUP_KEEP_WEEKLY=%s\n' "$(shell_quote "${CDW_BACKUP_KEEP_WEEKLY:-4}")"
 	printf 'CDW_BACKUP_KEEP_MONTHLY=%s\n' "$(shell_quote "${CDW_BACKUP_KEEP_MONTHLY:-6}")"
+	printf 'CDW_BACKUP_MODE=%s\n' "$mode"
 } | cdw_ssh "$server_id" "$user@$ip" "umask 077 && cat > ~/.cdw-backup.env"
+
+if [[ "$mode" == "state" ]]; then
+	log "copiando o estado OpenTofu para o repositório restic"
+	cdw_ssh "$server_id" "$user@$ip" "bash -s" <"$CDW_ROOT/scripts/lib/backup-remote.sh"
+	log "cópia do estado concluída"
+	exit 0
+fi
 
 log "rodando backup na VM (dumps, restic backup, forget --prune, check)"
 cdw_ssh "$server_id" "$user@$ip" "bash -s" <"$CDW_ROOT/scripts/lib/backup-remote.sh"

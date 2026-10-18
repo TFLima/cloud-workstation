@@ -27,7 +27,7 @@ if tf="$(tf_bin)"; then
 else
 	fail "nem tofu nem terraform encontrados"
 fi
-if has_cmd restic; then ok "restic"; else skip "restic ausente (necessário a partir da Fase 4)"; fi
+if has_cmd restic; then ok "restic"; else skip "restic ausente (só é necessário para recuperar o estado em outro computador)"; fi
 
 echo "Configuração:"
 if [[ -f "$ENV_FILE" ]]; then ok ".env presente com permissão restrita"; else skip ".env não encontrado; usando apenas o ambiente"; fi

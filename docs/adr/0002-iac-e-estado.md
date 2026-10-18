@@ -10,7 +10,9 @@
 - Código mantido compatível com Terraform >= 1.6 sempre que possível; a única
   dependência exclusiva do OpenTofu é a criptografia nativa de estado.
 - Provider `hetznercloud/hcloud` fixado em `= 1.70.0` (última versão encontrada
-  em releases.hashicorp.com em 17/10/2026), com `.terraform.lock.hcl` versionado.
+  em releases.hashicorp.com em 17/10/2026), com
+  `infrastructure/terraform/.terraform.lock.hcl` versionado (hashes `h1:` para
+  `linux_amd64` e `windows_amd64`).
 - **Estado local criptografado** com a criptografia nativa do OpenTofu
   (`key_provider "pbkdf2"` + `method "aes_gcm"`, `enforced = true` para estado e
   plano). A configuração é montada em tempo de execução na variável de ambiente
@@ -21,8 +23,8 @@
 - Backend `local` com caminho passado no `init` (`CDW_STATE_DIR`, padrão
   `~/.local/state/cdw`), fora do repositório.
 - O arquivo de estado fica no notebook do operador (fora da VM e fora do Git)
-  e é copiado, já criptografado, para o mesmo destino externo dos backups após
-  cada `make up`/`make down`.
+  e é copiado, já criptografado, para o mesmo destino externo dos backups ao
+  fim de cada `make up` e em cada `make backup`/`make down` (ADR-0007).
 - Backend remoto S3 fica como evolução opcional (ADR futuro), pois exige um
   serviço pago adicional ou credenciais extras.
 
