@@ -24,6 +24,7 @@
 | Entrar | `make connect` | SSH com `known_hosts` próprio da VM. |
 | VS Code | `make connect-print` | Copie o bloco `Host cdw` para `C:\Users\<você>\.ssh\config`. |
 | Diagnóstico | `make doctor` | Falha se houver porta exposta, SSH com senha, disco cheio etc. |
+| Subir ferramentas/serviços | `make deploy` | Perfis em `CDW_COMPOSE_PROFILES` (padrão `tools`); ver abaixo. |
 
 ## VS Code Remote - SSH (Windows)
 - O VS Code usa o OpenSSH do Windows. A chave privada precisa existir no
@@ -33,6 +34,24 @@
   com `ssh-keygen -lf ~/.local/state/cdw/known_hosts.<id>` no WSL.
 - Para serviços internos use túneis (`LocalForward 5432 127.0.0.1:5432`);
   nenhuma porta além da 22 fica aberta na internet.
+
+## Ambiente de desenvolvimento (ADR-0004)
+- **Claude Code e Codex** são instalados no host pelo bootstrap (não na
+  imagem). Depois de `make connect`, autentique interativamente uma vez:
+  `claude` (ou `codex`) e siga o login; nada disso é persistido em imagem,
+  Git ou log.
+- **Contêiner de ferramentas** (`git`, PHP/Composer, Node, Python): perfil
+  `tools` do Compose, usando a imagem publicada no GHCR por
+  `build-images.yml` (workflow manual; nunca publica sem alguém disparar
+  `push=true`). Antes do primeiro `make deploy` com esse perfil, defina
+  `CDW_TOOLS_IMAGE=ghcr.io/<owner>/cloud-workstation-dev@sha256:<digest>`
+  no `.env` local (o digest sai do resultado do workflow).
+- **PostgreSQL/Redis**: perfis `db`/`cache` (ou `full` para tudo); defina
+  `POSTGRES_PASSWORD` no `.env` local antes de usá-los. As portas só ficam em
+  `127.0.0.1` na VM — acesse por túnel SSH (`LocalForward 5432 127.0.0.1:5432`).
+- `make deploy` envia `docker/compose.yaml` e um `.env` (gerado a partir do
+  `.env` local, nunca impresso) para a VM e roda `docker compose up -d` com
+  os perfis escolhidos. Rodar de novo atualiza o que mudou.
 
 ## Mudança de IP do operador
 O firewall libera a porta 22 só para o IP detectado (ou `TF_VAR_admin_cidr`).

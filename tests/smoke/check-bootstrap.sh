@@ -29,4 +29,16 @@ for cmd in git jq make restic tmux; do
 	if command -v "$cmd" >/dev/null; then pass "pacote $cmd"; else flunk "pacote $cmd ausente"; fi
 done
 
+home="$(getent passwd "$user" | cut -d: -f6)"
+npm_prefix="$home/.local/share/cdw-agents"
+
+if [[ -x "$npm_prefix/bin/claude" ]]; then pass "claude instalado para $user"; else flunk "claude ausente em $npm_prefix/bin"; fi
+if [[ -x "$npm_prefix/bin/codex" ]]; then pass "codex instalado para $user"; else flunk "codex ausente em $npm_prefix/bin"; fi
+# /usr/local/bin (não um rc de shell): precisa funcionar também num comando
+# não interativo e não-login via "ssh host comando".
+for agent in claude codex; do
+	resolved="$(sudo -u "$user" env -i "PATH=/usr/local/bin:/usr/bin:/bin" sh -c "command -v $agent" 2>/dev/null || true)"
+	assert_status "/usr/local/bin/$agent" "$resolved" "$agent resolvido via /usr/local/bin num shell não interativo"
+done
+
 finish
