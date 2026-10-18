@@ -100,6 +100,26 @@
   Um dump de banco que não pôde ser aplicado (serviço fora do ar) fica em
   `~/restore-pending/` na VM para aplicação manual.
 
+- **Cópia externa do estado (ADR-0007)**: ao fim do `make up` e em todo
+  `make backup`, o estado OpenTofu (já criptografado) vai para o mesmo
+  repositório restic, num snapshot com a tag `cdw-state`. Uma sessão sem
+  `make deploy` também tem backup: sem Compose, só os dumps são pulados.
+
+## Recuperar o estado em outro computador
+Se você perder o notebook com a VM no ar, instale restic (`sudo apt-get
+install restic`), restaure a passphrase do estado e a senha do restic a
+partir do gerenciador de senhas, configure o `.env` com as mesmas variáveis
+`RESTIC_REPOSITORY`/`AWS_*` e rode:
+```bash
+set -a; source .env; set +a
+export RESTIC_PASSWORD_FILE=~/.config/cdw/restic-password
+restic restore latest --tag cdw-state --target /tmp/cdw-state
+install -d -m 700 ~/.local/state/cdw
+install -m 600 "$(find /tmp/cdw-state -name terraform.tfstate)" ~/.local/state/cdw/
+rm -rf /tmp/cdw-state
+```
+Depois disso `make status` e `make down` funcionam de novo.
+
 ## Mudança de IP do operador
 O firewall libera a porta 22 só para o IP detectado (ou `TF_VAR_admin_cidr`).
 Se sua rede mudar, rode `make plan` e `make up` de novo: o OpenTofu atualiza

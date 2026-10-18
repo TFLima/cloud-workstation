@@ -54,3 +54,12 @@ else
 	[[ "$got" == "version=$want_version" ]] || die "bootstrap não concluiu (esperado version=$want_version, obtido '${got:-nada}'); veja /var/log/cdw-bootstrap.log na VM"
 	log "VM pronta: $user@$ip (bootstrap $want_version). Próximo passo: make connect"
 fi
+
+# Cópia externa do estado (ADR-0007): sem ela, perder este computador deixa a
+# VM cobrando sem estado para destruí-la. Uma falha aqui não desfaz o make up.
+if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
+	bash "$CDW_ROOT/scripts/backup.sh" --state-only ||
+		warn "a cópia externa do estado falhou; o estado existe só em $CDW_STATE_DIR. Rode make backup quando puder."
+else
+	warn "RESTIC_REPOSITORY não definido: o estado OpenTofu existe só em $CDW_STATE_DIR, sem cópia externa"
+fi

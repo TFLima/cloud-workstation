@@ -13,10 +13,14 @@ ENV_FILE="$HOME/.cdw-backup.env"
 # shellcheck source=/dev/null
 source "$ENV_FILE"
 
+# Cópia do estado OpenTofu (já criptografado pelo OpenTofu no notebook; a VM
+# nunca vê a passphrase), enviada por scripts/backup.sh. Ver ADR-0007.
+STATE_UPLOAD="$HOME/.cdw-state-upload"
+
 STAGE="$(mktemp -d "$HOME/.cdw-backup-stage.XXXXXX")"
 cleanup() {
 	shred -u "$ENV_FILE" 2>/dev/null || rm -f "$ENV_FILE"
-	rm -rf "$STAGE"
+	rm -rf "$STAGE" "$STATE_UPLOAD"
 }
 trap cleanup EXIT
 
@@ -27,14 +31,33 @@ export RESTIC_REPOSITORY RESTIC_PASSWORD
 : "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY ausente}"
 : "${RESTIC_PASSWORD:?RESTIC_PASSWORD ausente}"
 
-COMPOSE_DIR="$HOME/compose"
-[[ -d "$COMPOSE_DIR" ]] || {
-	echo "nada implantado em $COMPOSE_DIR; rode make deploy antes de make backup" >&2
-	exit 1
+backup_state() {
+	if [[ -f "$STATE_UPLOAD/terraform.tfstate" ]]; then
+		echo "[backup] snapshot do estado OpenTofu criptografado (tag cdw-state)"
+		restic backup "$STATE_UPLOAD" --tag cdw-state --host "$(hostname)"
+	else
+		echo "[backup] estado OpenTofu não foi enviado; pulando cópia do estado"
+	fi
 }
 
+if [[ "${CDW_BACKUP_MODE:-full}" == "state" ]]; then
+	echo "[backup] repositório restic: inicializando se necessário"
+	restic snapshots >/dev/null 2>&1 || restic init
+	backup_state
+	echo "[backup] concluído: só o estado OpenTofu"
+	exit 0
+fi
+
+# Sem make deploy não há Compose nem bancos: os dumps são pulados, mas ~/work
+# e os dotfiles dos agentes entram no snapshot mesmo assim (make down depende
+# deste backup para não exigir CDW_SKIP_BACKUP=1).
+COMPOSE_DIR="$HOME/compose"
+if [[ ! -d "$COMPOSE_DIR" ]]; then
+	echo "[backup] nada implantado em $COMPOSE_DIR; pulando dumps dos bancos"
+fi
+
 running() {
-	(cd "$COMPOSE_DIR" && docker compose ps --status running --services 2>/dev/null) | grep -qx "$1"
+	[[ -d "$COMPOSE_DIR" ]] && (cd "$COMPOSE_DIR" && docker compose ps --status running --services 2>/dev/null) | grep -qx "$1"
 }
 
 mkdir -p "$STAGE/dumps"
@@ -59,8 +82,11 @@ else
 	echo "[backup] serviço redis não está no ar; pulando snapshot"
 fi
 
-dumps_json="$(printf '"%s",' "${dumps[@]}")"
-dumps_json="[${dumps_json%,}]"
+dumps_json="[]"
+if ((${#dumps[@]})); then
+	dumps_json="$(printf '"%s",' "${dumps[@]}")"
+	dumps_json="[${dumps_json%,}]"
+fi
 cat >"$STAGE/manifest.json" <<JSON
 {
   "date": "$(date -u +%FT%TZ)",
@@ -82,6 +108,8 @@ restic snapshots >/dev/null 2>&1 || restic init
 
 echo "[backup] enviando snapshot"
 restic backup "${backup_paths[@]}" --tag cdw --host "$(hostname)"
+
+backup_state
 
 echo "[backup] retenção (forget --prune)"
 # --group-by host,tags (não o padrão "host,paths"): a área de preparo em

@@ -58,4 +58,14 @@ for f in .env '*.tfstate' 'terraform.tfvars'; do
 	if grep -qxF "$f" .gitignore; then pass ".gitignore cobre $f"; else flunk ".gitignore não cobre $f"; fi
 done
 
+# O lock do provider precisa estar versionado e bater com a versão fixada em
+# versions.tf; sem ele, o init não confere o checksum do provider (ADR-0002).
+lock=infrastructure/terraform/.terraform.lock.hcl
+pinned="$(sed -nE 's/^ *version *= *"= *([0-9.]+)".*/\1/p' infrastructure/terraform/versions.tf)"
+if [[ -f "$lock" ]] && grep -qE "^ *version *= *\"$pinned\"" "$lock" && grep -q '"h1:' "$lock"; then
+	pass "lock do provider versionado com hashes da versão $pinned"
+else
+	flunk "$lock ausente ou divergente de versions.tf ($pinned)"
+fi
+
 finish
