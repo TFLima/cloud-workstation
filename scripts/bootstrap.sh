@@ -162,6 +162,9 @@ MaxAuthTries 3
 LoginGraceTime 30
 ClientAliveInterval 60
 ClientAliveCountMax 5"; then
+		# Com ssh.socket (padrão no 24.04) o diretório pode não existir antes da
+		# primeira conexão, e sem ele `sshd -t` falha.
+		install -d -m 0755 /run/sshd
 		if sshd -t; then
 			systemctl try-reload-or-restart ssh.service || true
 		else
