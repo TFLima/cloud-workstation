@@ -32,7 +32,11 @@ CLAUDE_CODE_VERSION="2.1.302"
 CODEX_VERSION="0.163.0"
 AGENTS_NODE_DIR="/usr/local/cdw-agents-node"
 
-BASE_PACKAGES=(ca-certificates curl gnupg git jq make openssh-server ufw unattended-upgrades restic tmux htop unzip)
+# restic (Fase 4, ADR-0003): fixado via apt (repositório oficial Ubuntu noble,
+# mesmo mecanismo de hold do Docker), não por "apt-get install restic" solto.
+RESTIC_VERSION="0.16.4-2ubuntu0.24.04.3"
+
+BASE_PACKAGES=(ca-certificates curl gnupg git jq make openssh-server ufw unattended-upgrades tmux htop unzip)
 
 export DEBIAN_FRONTEND=noninteractive
 LOG_FILE="${CDW_BOOTSTRAP_LOG:-/var/log/cdw-bootstrap.log}"
@@ -74,6 +78,17 @@ step_base_packages() {
 	log "pacotes base"
 	apt-get update -q
 	apt_install_missing "${BASE_PACKAGES[@]}"
+}
+
+step_restic() {
+	log "restic $RESTIC_VERSION (fixado e retido pelo apt-mark hold)"
+	local current
+	current="$(dpkg-query -W -f='${Version}' restic 2>/dev/null || true)"
+	if [[ "$current" != "$RESTIC_VERSION" ]]; then
+		log "instalando restic=$RESTIC_VERSION"
+		apt-get install -y --no-install-recommends --allow-downgrades --allow-change-held-packages "restic=$RESTIC_VERSION"
+		apt-mark hold restic >/dev/null
+	fi
 }
 
 step_docker() {
@@ -270,6 +285,7 @@ step_marker() {
 
 log "início (versão $CDW_BOOTSTRAP_VERSION)"
 step_base_packages
+step_restic
 step_docker
 step_user
 step_agents

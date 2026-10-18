@@ -74,4 +74,6 @@ jobs:
           fi
 
       - name: Verificar estado
-        run: bash tests/smoke/check-bootstrap.sh dev ci
+        run: |
+          restic_version="$(grep -m1 '^RESTIC_VERSION=' scripts/bootstrap.sh | cut -d'"' -f2)"
+          bash tests/smoke/check-bootstrap.sh dev ci "$restic_version"

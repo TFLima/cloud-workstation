@@ -4,7 +4,7 @@ locals {
     managed-by = "opentofu"
   }
 
-  bootstrap_version = "2"
+  bootstrap_version = "3"
 
   user_data = templatefile("${path.module}/../cloud-init/user-data.yaml.tftpl", {
     username          = var.username
