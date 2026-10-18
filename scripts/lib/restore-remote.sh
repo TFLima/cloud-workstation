@@ -62,6 +62,27 @@ for d in .claude .codex; do
 	fi
 done
 
+# Estado dos agentes (ADR-0008): volta para o home do usuário dos agentes, com o
+# dono dele, não para o do operador. O operador usa sudo; o agente não tem.
+AGENT_USER="${CDW_AGENT_USER:-agent}"
+AGENT_HOME="${CDW_AGENT_HOME:-$(getent passwd "$AGENT_USER" | cut -d: -f6 || true)}"
+agent_stage="$(find "$restored_home" -maxdepth 2 -type d -name agent-home 2>/dev/null | head -n1)"
+if [[ -n "$agent_stage" ]]; then
+	if [[ -z "$AGENT_HOME" ]]; then
+		echo "[restore] AVISO: usuário $AGENT_USER não existe nesta VM; estado dos agentes não restaurado" >&2
+	else
+		for d in .claude .codex; do
+			if [[ -d "$agent_stage/$d" ]]; then
+				echo "[restore] restaurando $AGENT_HOME/$d"
+				sudo -n install -d -m 0700 -o "$AGENT_USER" -g "$AGENT_USER" "$AGENT_HOME/$d"
+				sudo -n cp -a "$agent_stage/$d/." "$AGENT_HOME/$d/"
+				sudo -n chown -R "$AGENT_USER:$AGENT_USER" "$AGENT_HOME/$d"
+				sudo -n chmod 0700 "$AGENT_HOME/$d"
+			fi
+		done
+	fi
+fi
+
 COMPOSE_DIR="$HOME/compose"
 running() {
 	[[ -d "$COMPOSE_DIR" ]] && (cd "$COMPOSE_DIR" && docker compose ps --status running --services 2>/dev/null) | grep -qx "$1"

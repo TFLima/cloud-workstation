@@ -19,8 +19,9 @@
      script de backup);
   2. snapshot do Redis (`redis-cli SAVE` síncrono + cópia de `dump.rdb`);
   3. diretório `~/work` com repositórios (inclui branches/stashes não enviados);
-  4. dotfiles selecionados e estado dos agentes (`~/.claude`, `~/.codex`),
-     só dentro do repositório restic criptografado;
+  4. dotfiles selecionados e estado dos agentes (`~/.claude`, `~/.codex` do
+     usuário `agent`, lidos com `sudo` pelo operador; ADR-0008), só dentro do
+     repositório restic criptografado;
   5. manifesto JSON (data, hostname, versão do bootstrap, versões de
      Docker/restic, lista de dumps) — usado no restore para avisar sobre
      incompatibilidade de versões.

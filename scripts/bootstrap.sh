@@ -3,7 +3,8 @@
 # e seguro para rodar de novo: cada etapa verifica o estado antes de alterar.
 #
 # Variáveis (de /etc/cdw/bootstrap.env ou do ambiente):
-#   CDW_USER                 usuário não-root (obrigatório)
+#   CDW_USER                 usuário não-root do operador (obrigatório)
+#   CDW_AGENT_USER           usuário dos agentes, sem sudo e sem Docker (padrão: agent)
 #   CDW_BOOTSTRAP_VERSION    versão registrada em /etc/cdw/bootstrap-version
 #   CDW_SKIP_DOCKER_INSTALL  1 = não instala Docker (usado só no teste de CI)
 set -Eeuo pipefail
@@ -16,6 +17,9 @@ fi
 
 : "${CDW_USER:?CDW_USER não definido}"
 CDW_BOOTSTRAP_VERSION="${CDW_BOOTSTRAP_VERSION:-dev}"
+CDW_AGENT_USER="${CDW_AGENT_USER:-agent}"
+# Grupo que compartilha ~/work entre o operador e os agentes (ADR-0008).
+CDW_WORK_GROUP="work"
 
 # Versões fixadas (repositório oficial download.docker.com, Ubuntu noble).
 DOCKER_CE_VERSION="5:29.9.1-1~ubuntu.24.04~noble"
@@ -36,7 +40,7 @@ AGENTS_NODE_DIR="/usr/local/cdw-agents-node"
 # mesmo mecanismo de hold do Docker), não por "apt-get install restic" solto.
 RESTIC_VERSION="0.16.4-2ubuntu0.24.04.3"
 
-BASE_PACKAGES=(ca-certificates curl gnupg git jq make openssh-server ufw unattended-upgrades tmux htop unzip)
+BASE_PACKAGES=(ca-certificates curl gnupg git jq make openssh-server ufw unattended-upgrades tmux htop unzip acl)
 
 export DEBIAN_FRONTEND=noninteractive
 LOG_FILE="${CDW_BOOTSTRAP_LOG:-/var/log/cdw-bootstrap.log}"
@@ -163,21 +167,61 @@ step_user() {
 		log "usuário $CDW_USER não existe (deveria ter sido criado pelo cloud-init)"
 		return 1
 	}
+	if [[ "$CDW_AGENT_USER" == "$CDW_USER" ]]; then
+		log "CDW_AGENT_USER não pode ser o usuário do operador ($CDW_USER)"
+		return 1
+	fi
 	if getent group docker >/dev/null && ! id -nG "$CDW_USER" | tr ' ' '\n' | grep -qx docker; then
 		usermod -aG docker "$CDW_USER"
 	fi
-	local home
+
+	# Usuário dos agentes (ADR-0008): sem senha, sem sudo, fora do grupo docker
+	# e fora do AllowUsers do sshd; só é alcançado por "cdw-agent" a partir do
+	# operador. O home é privado: nem o operador lê sem sudo.
+	log "usuário dos agentes $CDW_AGENT_USER (sem sudo, sem docker)"
+	getent group "$CDW_WORK_GROUP" >/dev/null || groupadd "$CDW_WORK_GROUP"
+	id "$CDW_AGENT_USER" >/dev/null 2>&1 ||
+		useradd --create-home --shell /bin/bash --user-group \
+			--comment "Cloud Dev Workstation agents" "$CDW_AGENT_USER"
+	passwd -l "$CDW_AGENT_USER" >/dev/null
+	local agent_home
+	agent_home="$(getent passwd "$CDW_AGENT_USER" | cut -d: -f6)"
+	chmod 0700 "$agent_home"
+	local u
+	for u in "$CDW_USER" "$CDW_AGENT_USER"; do
+		id -nG "$u" | tr ' ' '\n' | grep -qx "$CDW_WORK_GROUP" || usermod -aG "$CDW_WORK_GROUP" "$u"
+	done
+	# Defesa: um bootstrap antigo ou alteração manual não pode deixar o agente
+	# privilegiado.
+	local g
+	for g in sudo docker; do
+		if id -nG "$CDW_AGENT_USER" | tr ' ' '\n' | grep -qx "$g"; then
+			gpasswd -d "$CDW_AGENT_USER" "$g" >/dev/null
+		fi
+	done
+
+	local home work
 	home="$(getent passwd "$CDW_USER" | cut -d: -f6)"
-	install -d -m 0755 -o "$CDW_USER" -g "$CDW_USER" "$home/work"
+	work="$home/work"
+	# O agente atravessa o home do operador (x) até ~/work, mas não lista nem lê
+	# nada dele; arquivos sensíveis do operador são 0600/0700.
+	chmod 0711 "$home"
+	install -d -m 2775 -o "$CDW_USER" -g "$CDW_WORK_GROUP" "$work"
+	# ACL padrão: arquivos novos em ~/work saem graváveis pelo grupo, qualquer
+	# que seja o umask de quem os cria (editor do operador, git do agente).
+	setfacl -m "d:g::rwx" "$work" || log "AVISO: sem suporte a ACL em $work; arquivos novos podem ficar só legíveis ao grupo"
 }
 
 step_agents() {
-	log "Claude Code e Codex CLI (ADR-0004: no host, não na imagem; sem credenciais)"
+	log "Claude Code e Codex CLI (ADR-0004: no host, não na imagem; ADR-0008: como $CDW_AGENT_USER; sem credenciais)"
 	local home npm_prefix marker want
-	home="$(getent passwd "$CDW_USER" | cut -d: -f6)"
+	home="$(getent passwd "$CDW_AGENT_USER" | cut -d: -f6)"
 	npm_prefix="$home/.local/share/cdw-agents"
 	marker="$npm_prefix/versions-installed"
 	want="claude-code=$CLAUDE_CODE_VERSION codex=$CODEX_VERSION"
+
+	step_agents_launcher "$npm_prefix"
+
 	if [[ -f "$marker" ]] && [[ "$(cat "$marker")" == "$want" ]]; then
 		return 0
 	fi
@@ -204,8 +248,11 @@ step_agents() {
 		rm -f "$tmp"
 	fi
 
-	install -d -m 0755 -o "$CDW_USER" -g "$CDW_USER" "$npm_prefix"
-	log "instalando @anthropic-ai/claude-code@$CLAUDE_CODE_VERSION e @openai/codex@$CODEX_VERSION para $CDW_USER"
+	# "install -d -o" só ajusta o dono do último componente; os pais precisam
+	# ser do agente, senão o Claude Code não consegue criar ~/.local/state.
+	install -d -m 0755 -o "$CDW_AGENT_USER" -g "$CDW_AGENT_USER" \
+		"$home/.local" "$home/.local/share" "$npm_prefix"
+	log "instalando @anthropic-ai/claude-code@$CLAUDE_CODE_VERSION e @openai/codex@$CODEX_VERSION para $CDW_AGENT_USER"
 	# su -l limpa o ambiente; numa VM sem proxy de saída isso não muda nada,
 	# mas repassamos um eventual proxy de rede (ex.: redes corporativas) em vez
 	# de depender de ele ter sido herdado.
@@ -213,25 +260,52 @@ step_agents() {
 	for var in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; do
 		[[ -n "${!var:-}" ]] && proxy_env+="$(printf '%q=%q ' "$var" "${!var}")"
 	done
-	su - "$CDW_USER" -c "env $proxy_env PATH=\"$AGENTS_NODE_DIR/bin:\$PATH\" npm_config_prefix=\"$npm_prefix\" \
+	su - "$CDW_AGENT_USER" -c "env $proxy_env PATH=\"$AGENTS_NODE_DIR/bin:\$PATH\" npm_config_prefix=\"$npm_prefix\" \
 		npm install -g --no-fund --no-audit \
 		'@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION' '@openai/codex@$CODEX_VERSION'"
 
-	# Symlinks em /usr/local/bin (sempre no PATH, interativo ou não; um rc de
-	# shell não serve porque "ssh host comando" não é nem login nem interativo).
-	# O codex é um script "#!/usr/bin/env node": sem "node" nesse mesmo PATH,
-	# ele falha com "node: No such file or directory" (claude já é um binário
-	# nativo, sem essa dependência, mas symlinkamos o node mesmo assim).
+	# O codex é um script "#!/usr/bin/env node": sem "node" no PATH ele falha
+	# com "node: No such file or directory". O node fica em /usr/local/bin; os
+	# agentes em si não: quem os chama é o cdw-agent, que acerta o PATH. Sem
+	# symlinks de claude/codex em /usr/local/bin, digitar "claude" como
+	# operador falha em vez de rodar com os privilégios dele.
 	ln -sf "$AGENTS_NODE_DIR/bin/node" /usr/local/bin/node
 	local bin
 	for bin in claude codex; do
-		if [[ -x "$npm_prefix/bin/$bin" ]]; then
-			ln -sf "$npm_prefix/bin/$bin" "/usr/local/bin/$bin"
-		fi
+		if [[ -L "/usr/local/bin/$bin" ]]; then rm -f "/usr/local/bin/$bin"; fi
 	done
 	printf '%s\n' "$want" >"$marker"
-	chown "$CDW_USER:$CDW_USER" "$marker"
-	log "agentes instalados; login (claude / codex) é feito pelo operador via SSH, nunca embutido aqui"
+	chown "$CDW_AGENT_USER:$CDW_AGENT_USER" "$marker"
+	log "agentes instalados; login (cdw-agent claude / cdw-agent codex) é feito pelo operador via SSH, nunca embutido aqui"
+}
+
+# Lançador dos agentes: roda o comando como o usuário dos agentes, no diretório
+# atual, com o PATH dos agentes. Chamado pelo operador (que tem sudo); o agente
+# em si não tem. Instalado antes do marcador de versões porque não depende dele.
+step_agents_launcher() {
+	local npm_prefix="$1" launcher
+	launcher="$(
+		cat <<'LAUNCHER'
+#!/usr/bin/env bash
+# Roda um comando (claude, codex, bash...) como o usuário dos agentes.
+set -Eeuo pipefail
+agent_user="@AGENT_USER@"
+agent_path="@AGENT_BIN@:@NODE_BIN@:/usr/local/bin:/usr/bin:/bin"
+if (($# == 0)); then
+	echo "uso: cdw-agent claude|codex|bash [argumentos...]" >&2
+	exit 2
+fi
+if [[ "$(id -un)" == "$agent_user" ]]; then
+	exec env "PATH=$agent_path" "$@"
+fi
+exec sudo -u "$agent_user" -H -- env "PATH=$agent_path" \
+	bash -c 'cd "$1" && shift && exec "$@"' cdw-agent "$PWD" "$@"
+LAUNCHER
+	)"
+	launcher="${launcher//@AGENT_USER@/$CDW_AGENT_USER}"
+	launcher="${launcher//@AGENT_BIN@/$npm_prefix/bin}"
+	launcher="${launcher//@NODE_BIN@/$AGENTS_NODE_DIR/bin}"
+	write_if_changed /usr/local/bin/cdw-agent "$launcher" 0755 || true
 }
 
 step_ssh() {

@@ -41,9 +41,21 @@
 
 ## Ambiente de desenvolvimento (ADR-0004)
 - **Claude Code e Codex** são instalados no host pelo bootstrap (não na
-  imagem). Depois de `make connect`, autentique interativamente uma vez:
-  `claude` (ou `codex`) e siga o login; nada disso é persistido em imagem,
-  Git ou log.
+  imagem), num usuário próprio, `agent`, sem `sudo` e sem Docker (ADR-0008).
+  Eles não leem o seu home, nem as credenciais do backup. Depois de
+  `make connect`, abra-os com `cdw-agent` no diretório do projeto:
+  `cdw-agent claude` (ou `cdw-agent codex`, ou `cdw-agent bash` para um shell
+  do agente) e autentique na primeira vez; nada disso é persistido em imagem,
+  Git ou log. Digitar só `claude` não funciona de propósito.
+- **Arquivos em `~/work`** são compartilhados entre você e o agente (grupo
+  `work`): os dois criam e editam. Revise o que o agente deixou (scripts,
+  hooks do Git, tarefas do VS Code) antes de executar. Para o agente fazer
+  push, dê a ele um token do GitHub próprio (fine-grained, só nos
+  repositórios necessários), configurado dentro de `cdw-agent bash`; não
+  reaproveite o seu.
+- **Só VMs criadas com o bootstrap versão 5 em diante têm esse isolamento.**
+  O `make up` não reaplica o bootstrap numa VM existente; use `make down` e
+  `make up` para recriar.
 - **Contêiner de ferramentas** (`git`, PHP/Composer, Node, Python): perfil
   `tools` do Compose, usando a imagem publicada no GHCR por
   `build-images.yml` (workflow manual; nunca publica sem alguém disparar
@@ -81,8 +93,8 @@
 - **`make backup`**: na VM atual, faz `pg_dump -Fc` do PostgreSQL (se o
   perfil `db`/`full` estiver no ar) e `redis-cli SAVE` + cópia do `dump.rdb`
   (se `cache`/`full` estiver no ar), grava um manifesto (data, hostname,
-  versões) e envia tudo isso mais `~/work` e `~/.claude`/`~/.codex` como um
-  único snapshot `restic backup`. Depois aplica a retenção (`forget --prune`,
+  versões) e envia tudo isso mais `~/work` e o `~/.claude`/`~/.codex` do
+  usuário `agent` (copiados com `sudo`) como um único snapshot `restic backup`. Depois aplica a retenção (`forget --prune`,
   configurável por `CDW_BACKUP_KEEP_DAILY`/`_WEEKLY`/`_MONTHLY` no `.env`
   local) e verifica integridade com `restic check --read-data-subset=5%`.
   As credenciais do restic são enviadas por stdin via SSH a cada execução

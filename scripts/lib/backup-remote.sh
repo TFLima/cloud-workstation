@@ -51,6 +51,23 @@ fi
 # Sem make deploy não há Compose nem bancos: os dumps são pulados, mas ~/work
 # e os dotfiles dos agentes entram no snapshot mesmo assim (make down depende
 # deste backup para não exigir CDW_SKIP_BACKUP=1).
+# Estado dos agentes (ADR-0008): vive no home do usuário dos agentes, que é
+# privado. O operador (com sudo) copia para a área de preparo, de onde o restic
+# o envia junto com o resto; a cópia some com o trap de saída.
+AGENT_USER="${CDW_AGENT_USER:-agent}"
+AGENT_HOME="${CDW_AGENT_HOME:-$(getent passwd "$AGENT_USER" | cut -d: -f6 || true)}"
+stage_agent_state() {
+	local d found=()
+	[[ -n "$AGENT_HOME" ]] || return 0
+	for d in .claude .codex; do
+		if sudo -n test -e "$AGENT_HOME/$d"; then found+=("$d"); fi
+	done
+	((${#found[@]})) || return 0
+	echo "[backup] copiando o estado dos agentes ($AGENT_USER): ${found[*]}"
+	install -d -m 0700 "$STAGE/agent-home"
+	sudo -n tar -C "$AGENT_HOME" -cf - "${found[@]}" | tar -xf - -C "$STAGE/agent-home"
+}
+
 COMPOSE_DIR="$HOME/compose"
 if [[ ! -d "$COMPOSE_DIR" ]]; then
 	echo "[backup] nada implantado em $COMPOSE_DIR; pulando dumps dos bancos"
@@ -81,6 +98,8 @@ if running redis; then
 else
 	echo "[backup] serviço redis não está no ar; pulando snapshot"
 fi
+
+stage_agent_state
 
 dumps_json="[]"
 if ((${#dumps[@]})); then
