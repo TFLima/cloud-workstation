@@ -14,7 +14,8 @@ source "$CDW_ROOT/scripts/lib/hcloud.sh"
 cdw_load_config
 
 echo "Recursos na Hetzner com rótulo project=cloud-dev-workstation:"
-labeled="$(hcloud_list_labeled)"
+labeled="$(hcloud_list_labeled)" ||
+	die "falha ao consultar a API da Hetzner (token, rede ou resposta inesperada); não é seguro afirmar que não há recursos remanescentes."
 if [[ -n "$labeled" ]]; then
 	printf '  - %s\n' "${labeled//$'\n'/$'\n  - '}"
 else

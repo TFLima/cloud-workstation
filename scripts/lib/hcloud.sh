@@ -36,6 +36,29 @@ hcloud_check_type() {
 		  end' <<<"$json"
 }
 
+# Só o preço de um tipo numa localização, sem as checagens de disponibilidade
+# de hcloud_check_type (que servem para ESCOLHER um tipo ao provisionar). Para
+# precificar um servidor que já existe (make status/make down), a Hetzner
+# ainda cobra pelo preço mesmo que o tipo tenha ficado sem estoque ou tenha
+# sido descontinuado nesse meio tempo (ex.: o próprio caso do CX43 usado como
+# fallback) -- usar hcloud_check_type ali faria a estimativa de custo e o
+# alerta de orçamento sumirem exatamente nesse cenário.
+# Imprime "<preço_hora_liquido> <preço_mês_liquido>" ou nada (vazio) se o tipo
+# não existir ou não tiver preço nessa localização.
+hcloud_type_price() {
+	local type="$1" location="$2" json
+	json="$(hcloud_get "/server_types?name=$type" 2>/dev/null)" || return 0
+	jq -r --arg loc "$location" '
+		.server_types[0] as $t
+		| if $t == null then empty
+		  else
+		    ([$t.prices[]? | select(.location == $loc)][0]) as $p
+		    | if $p == null then empty
+		      else "\($p.price_hourly.net) \($p.price_monthly.net)"
+		      end
+		  end' <<<"$json" 2>/dev/null
+}
+
 # Escolhe o primeiro tipo disponível entre o principal e as alternativas.
 # Imprime "<tipo> <preço_hora> <preço_mês>" ou falha.
 hcloud_select_type() {
@@ -69,12 +92,21 @@ hcloud_ipv4_monthly() {
 # volumes/imagens(snapshots) mesmo não sendo usados no desenho atual
 # (ADR-0003/backups=false), como rede de segurança contra algo criado fora
 # do OpenTofu (ex.: manualmente no console). Vazio se não houver nenhum.
+# Retorna 1 se QUALQUER chamada à API ou parse falhar (token inválido, rede
+# fora, endpoint com erro, resposta que o jq não entende) -- sem isso, um
+# "|| true" por item transformaria toda falha em "nenhum recurso encontrado",
+# o que no make audit mentiria "nenhum encontrado" e no make down deixaria o
+# pós-destruição afirmar "custo residual: EUR 0" sem ter checado de verdade.
 hcloud_list_labeled() {
-	local label="${1:-project=cloud-dev-workstation}" kind
+	local label="${1:-project=cloud-dev-workstation}" kind out failed=0
 	for kind in servers firewalls ssh_keys primary_ips volumes images; do
-		hcloud_get "/$kind?label_selector=$label" 2>/dev/null |
-			jq -r --arg k "$kind" '.[$k][]? | "\($k) \(.id) \(.name)"' 2>/dev/null || true
+		if ! out="$(hcloud_get "/$kind?label_selector=$label" 2>/dev/null)"; then
+			failed=1
+			continue
+		fi
+		jq -r --arg k "$kind" '.[$k][]? | "\($k) \(.id) \(.name)"' <<<"$out" 2>/dev/null || failed=1
 	done
+	((failed == 0))
 }
 
 # Horas decorridas desde um timestamp ISO8601 UTC até agora (ou até $2, só

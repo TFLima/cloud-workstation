@@ -41,9 +41,12 @@ tf_run state list | sed 's/^/  - /'
 echo "Nenhum volume ou snapshot é usado neste desenho (ADR-0003: backups = false);"
 echo "nada além do listado acima fica retido ou cobrado por este projeto na Hetzner."
 
-price_result="$(hcloud_check_type "$server_type" "$location" 2>/dev/null || true)"
-if [[ "$price_result" == ok* ]]; then
-	read -r _ hourly monthly <<<"$price_result"
+# hcloud_type_price (não hcloud_check_type): o servidor já existe, então o
+# preço vale mesmo que o tipo tenha ficado sem estoque/descontinuado nesse
+# meio tempo -- ver comentário equivalente em scripts/status.sh.
+price_result="$(hcloud_type_price "$server_type" "$location" 2>/dev/null || true)"
+if [[ -n "$price_result" ]]; then
+	read -r hourly monthly <<<"$price_result"
 	echo
 	echo "Custo que deixa de ser cobrado: EUR $hourly/h (teto EUR $monthly/mês) + IPv4 primário."
 fi
@@ -68,8 +71,19 @@ rm -f "$CDW_STATE_DIR/known_hosts.$server_id"
 log "destruído."
 
 log "conferindo recursos remanescentes com rótulo project=cloud-dev-workstation..."
-remaining="$(hcloud_list_labeled 2>/dev/null || true)"
-if [[ -z "$remaining" ]]; then
+# Sem "|| true" aqui: diferente da auditoria informativa antes da destruição
+# (que já tem o estado local como referência), esta checagem é o que afirma
+# "custo residual: EUR 0" -- se a API/jq falhar (token, rede, etc.), isso NÃO
+# pode virar silenciosamente "nenhum recurso remanescente" (achado real de
+# revisão no PR #4).
+if remaining="$(hcloud_list_labeled 2>/dev/null)"; then
+	audit_ok=1
+else
+	audit_ok=0
+fi
+if [[ "$audit_ok" == "0" ]]; then
+	warn "não foi possível confirmar pela API se restou algum recurso com esse rótulo (falha na consulta); confira manualmente no console da Hetzner."
+elif [[ -z "$remaining" ]]; then
 	log "nenhum recurso remanescente; custo residual na Hetzner: EUR 0."
 else
 	warn "ainda há recursos com esse rótulo na Hetzner (confira no console, pode ser atraso da API):"

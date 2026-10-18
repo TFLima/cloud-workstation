@@ -23,8 +23,14 @@ user="$(tf_output username)"
 server_type="$(tf_output server_type)"
 location="$(tf_output location)"
 server_json="$(hcloud_get "/servers/$server_id" 2>/dev/null || true)"
-api_status="$(jq -r '.server.status // "desconhecido (API)"' <<<"${server_json:-{}}" 2>/dev/null)"
-created="$(jq -r '.server.created // empty' <<<"${server_json:-{}}" 2>/dev/null)"
+# "${server_json:-{}}" não funciona: bash encerra a expansão de parâmetro no
+# primeiro "}" (não faz contagem de chaves no valor padrão), então o "}" que
+# fecharia o "{}" literal termina a expansão, e o "}" restante sobra colado
+# ao valor — ex.: um JSON de verdade virava "...}}" com um "}" extra, que
+# quebra o jq. Por isso o valor padrão é aplicado numa linha separada.
+[[ -z "$server_json" ]] && server_json='{}'
+api_status="$(jq -r '.server.status // "desconhecido (API)"' <<<"$server_json" 2>/dev/null)"
+created="$(jq -r '.server.created // empty' <<<"$server_json" 2>/dev/null)"
 
 echo "Servidor : $(tf_output server_name) ($server_type, $location)"
 echo "Estado   : $api_status"
@@ -34,10 +40,15 @@ echo "Usuário  : $user"
 if [[ -n "$created" ]]; then
 	elapsed="$(hcloud_elapsed_hours "$created" 2>/dev/null || true)"
 	if [[ -n "$elapsed" ]]; then
-		price_result="$(hcloud_check_type "$server_type" "$location" 2>/dev/null || true)"
+		# hcloud_type_price (não hcloud_check_type): o servidor já existe e já
+		# está sendo cobrado, mesmo que o tipo tenha ficado sem estoque ou
+		# descontinuado nesse meio tempo -- hcloud_check_type serve para
+		# ESCOLHER um tipo ao provisionar e esconderia o preço/alerta de
+		# orçamento exatamente nesse cenário (achado real de revisão no PR #4).
+		price_result="$(hcloud_type_price "$server_type" "$location" 2>/dev/null || true)"
 		cost_line="Sessão   : $elapsed h decorridas desde $created"
-		if [[ "$price_result" == ok* ]]; then
-			read -r _ hourly _ <<<"$price_result"
+		if [[ -n "$price_result" ]]; then
+			read -r hourly _ <<<"$price_result"
 			cost="$(awk -v e="$elapsed" -v h="$hourly" 'BEGIN { printf "%.2f", e * h }')"
 			cost_line+=" (~EUR $cost até agora, estimativa)"
 			if [[ -n "${CDW_BUDGET_ALERT_EUR:-}" ]] && awk -v c="$cost" -v b="$CDW_BUDGET_ALERT_EUR" 'BEGIN{exit !(c>b)}'; then

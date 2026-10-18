@@ -34,6 +34,44 @@ destruição. Guardrails de custo (TTL, alerta de orçamento) são **avisos em
   `docs/adr/0006-...` atualizados; `Makefile` com `audit` e a descrição
   real de `down`.
 
+## Achados da revisão automática (Codex) no PR #4
+Depois de abrir o PR, a revisão automática encontrou 3 problemas reais,
+todos corrigidos e verificados (testes unitários novos reproduzindo cada
+cenário contra a API falsa):
+1. **`status.sh` quebrava para qualquer servidor real (P1)**: o valor
+   padrão `"${server_json:-{}}"` não funciona em bash — a expansão de
+   parâmetro é fechada pelo primeiro `}` encontrado (bash não faz contagem
+   de chaves no valor padrão), então um JSON de verdade virava
+   `...}}` com uma chave sobrando no fim, o `jq` falhava, e com
+   `set -e` o `make status` nunca chegava a imprimir nada para uma VM
+   alcançável. Reproduzido isoladamente em bash (`x="${v:-{}}"` com `v`
+   não vazio devolve `"${v}}"`, com um `}` extra). Corrigido aplicando o
+   valor padrão (`'{}'`) numa linha separada em vez de dentro da própria
+   expansão.
+2. **Auditoria podia reportar "nada encontrado" por falha, não por estar
+   vazia (P2)**: `hcloud_list_labeled` tinha um `|| true` por tipo de
+   recurso, então token inválido, rede fora ou uma resposta que o `jq` não
+   entende todos viravam silenciosamente "sem recursos" — no `make down`
+   isso podia fazer o passo pós-destruição afirmar "custo residual: EUR 0"
+   sem ter de fato confirmado nada. Corrigido: a função agora retorna
+   falha (sem suprimir com `|| true`) quando qualquer consulta falha;
+   `make audit` propaga isso como erro, e a checagem pós-destruição de
+   `make down` agora diferencia "falha ao consultar" de "nenhum recurso
+   remanescente" (a auditoria *antes* de destruir continua best-effort, já
+   que o estado local serve de referência ali). Teste novo: token inválido
+   faz `hcloud_list_labeled` retornar código de saída 1.
+3. **Preço de um tipo sem estoque/descontinuado não entrava no cálculo de
+   custo (P2)**: `hcloud_check_type` (feito para *escolher* um tipo ao
+   provisionar) rejeita tipos sem estoque/descontinuados mesmo quando a API
+   ainda informa o preço — um servidor já existente desse tipo (ex.: o
+   próprio caso do CX43 usado como fallback) ficava sem a estimativa de
+   custo e sem o alerta de `CDW_BUDGET_ALERT_EUR` em `make status`/`make
+   down`. Corrigido com uma função nova, `hcloud_type_price`, que só lê o
+   preço, sem as checagens de disponibilidade; `status.sh` e
+   `destroy-safe.sh` passaram a usá-la para precificar um servidor que já
+   existe. Teste novo: `hcloud_type_price cx43 nbg1` (tipo sem estoque
+   nessa localização nas fixtures) devolve o preço normalmente.
+
 ## Sobre volumes e snapshots (Fase 5 do plano original)
 O plano original pede para "diferenciar desligar, destruir VM, excluir
 volumes, snapshots, IPs e outros recursos faturáveis". Este repositório
@@ -51,6 +89,7 @@ desse desenho.
 |---|---|---|
 | `make check` (shellcheck, shfmt, yamllint, `tofu fmt`/`validate`, `docker compose config`, suíte de testes) | local | OK |
 | Testes unitários novos: `hcloud_list_labeled` contra uma API Hetzner falsa (mock Python, estendido para servers/firewalls/ssh_keys/primary_ips/volumes/images), `hcloud_elapsed_hours` com timestamps fixos (8h30→9h arredonda, 8h exato não arredonda) | local | OK |
+| **Correções da revisão do Codex no PR #4**: `hcloud_type_price` lê o preço de um tipo sem estoque (`cx43`/`nbg1` nas fixtures) e devolve vazio para tipo inexistente; `hcloud_list_labeled` com token inválido retorna código de saída 1 em vez de "nenhum encontrado"; o bug do `"${server_json:-{}}"` foi reproduzido isoladamente em bash antes da correção | local (API falsa + bash) | OK |
 | Lógica de custo da sessão (`awk` de multiplicação e de comparação usados em `status.sh`/`destroy-safe.sh`) verificada isoladamente com valores de exemplo | local | OK |
 | `bash -n` nos três scripts novos/alterados (`audit.sh`, `destroy-safe.sh`, `status.sh`) | local | OK (sintaxe) |
 
