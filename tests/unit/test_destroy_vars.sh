@@ -30,8 +30,7 @@ assert_not_contains "$fp3" "$fp1" "chaves diferentes dão fingerprints diferente
 unset TF_VAR_ssh_public_key TF_VAR_admin_cidr
 CDW_SSH_PUBLIC_KEY_FILE="$TMP/chave-inexistente.pub"
 CDW_IP_ECHO_URL="http://127.0.0.1:1"
-cdw_export_tf_vars_for_destroy 2>/tmp_err.$$
-rm -f /tmp_err.$$
+cdw_export_tf_vars_for_destroy 2>/dev/null
 assert_contains "$TF_VAR_ssh_public_key" "ssh-ed25519 " "sem chave local, usa chave fictícia com formato válido"
 assert_status "192.0.2.1/32" "$TF_VAR_admin_cidr" "sem rede, usa CIDR fictício válido"
 
