@@ -26,6 +26,7 @@ if ((needs_postgres)) && [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
 	die "perfil db/full selecionado mas POSTGRES_PASSWORD não está definido no .env local"
 fi
 
+cdw_setup_encryption
 tf_init
 tf_has_server || die "nenhuma VM no estado local; rode make up primeiro"
 
@@ -43,15 +44,18 @@ mapfile -t ssh_opts < <(cdw_ssh_opts "$server_id")
 scp "${ssh_opts[@]}" "$CDW_ROOT/docker/compose.yaml" "$user@$ip:$remote_dir/compose.yaml"
 
 # .env remoto: só por stdin via SSH, nunca gravado em disco local nem impresso.
+# O Compose interpola "$" no .env (variable interpolation); um valor com "$"
+# (comum em senha gerada) precisa virar "$$" para chegar literal ao serviço.
+env_escape() { printf '%s' "$1" | sed 's/\$/$$/g'; }
 {
-	printf 'CDW_PROJECTS_DIR=%s\n' "${CDW_PROJECTS_DIR:-/home/$user/work}"
+	printf 'CDW_PROJECTS_DIR=%s\n' "$(env_escape "${CDW_PROJECTS_DIR:-/home/$user/work}")"
 	if [[ -n "${CDW_TOOLS_IMAGE:-}" ]]; then
-		printf 'CDW_TOOLS_IMAGE=%s\n' "$CDW_TOOLS_IMAGE"
+		printf 'CDW_TOOLS_IMAGE=%s\n' "$(env_escape "$CDW_TOOLS_IMAGE")"
 	fi
 	if ((needs_postgres)); then
-		printf 'POSTGRES_USER=%s\n' "${POSTGRES_USER:-dev}"
-		printf 'POSTGRES_PASSWORD=%s\n' "${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env local (perfil db/full selecionado)}"
-		printf 'POSTGRES_DB=%s\n' "${POSTGRES_DB:-dev}"
+		printf 'POSTGRES_USER=%s\n' "$(env_escape "${POSTGRES_USER:-dev}")"
+		printf 'POSTGRES_PASSWORD=%s\n' "$(env_escape "${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env local (perfil db/full selecionado)}")"
+		printf 'POSTGRES_DB=%s\n' "$(env_escape "${POSTGRES_DB:-dev}")"
 	fi
 } | cdw_ssh "$server_id" "$user@$ip" "cat > $remote_dir/.env && chmod 600 $remote_dir/.env"
 

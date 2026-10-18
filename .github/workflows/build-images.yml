@@ -68,6 +68,12 @@ jobs:
             echo "Publicado. Digest: $digest"
             echo "Defina no .env local:"
             echo "CDW_TOOLS_IMAGE=ghcr.io/$owner/cloud-workstation-dev@$digest"
+            echo
+            echo "ATENÇÃO: o GHCR cria o pacote como PRIVADO na primeira publicação."
+            echo "A VM não autentica no GHCR (ADR-0004: imagem pública, sem token na VM)."
+            echo "Na primeira vez, torne o pacote público manualmente antes do 'make deploy':"
+            echo "  github.com/$owner?tab=packages -> cloud-workstation-dev ->"
+            echo "  Package settings -> Change visibility -> Public"
           else
             echo "Build validado, nada publicado (push=false). Rode de novo com push=true para publicar no GHCR."
           fi

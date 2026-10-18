@@ -40,6 +40,24 @@ atualizado com o mecanismo concreto.
 - `.env.example`, `docs/operations.md`, `README.md` e `docs/adr/0004-...`
   atualizados.
 
+## Revisão automática (Codex) no PR
+A revisão automática do PR #2 encontrou 4 problemas reais, todos corrigidos:
+1. **`codex` sem `node` no PATH persistente**: o launcher do `codex` é um
+   script `#!/usr/bin/env node`; symlinkar só `claude`/`codex` em
+   `/usr/local/bin` não bastava (o `claude` é um binário nativo e não
+   depende disso, por isso só ele passava). Corrigido symlinkando `node`
+   também. O smoke test antigo só checava `command -v` (resolve mas não
+   executa); agora ele roda `--version` de verdade.
+2. **`scripts/deploy.sh` sem `cdw_setup_encryption` antes do `tf_init`**:
+   faltava a chamada que os demais comandos (`status.sh`, `connect.sh`) já
+   fazem; sem ela o estado criptografado não seria lido. Corrigido.
+3. **Senha do Postgres com `$` quebraria no Compose**: o `.env` gerado não
+   escapava `$`, que o Compose interpola. Corrigido com `$$` (dotenv-safe).
+4. **Pacote do GHCR nasce privado**: a VM não autentica no GHCR (a imagem é
+   pensada para ser pública), então a primeira publicação falharia ao
+   puxar a imagem. Documentado o passo manual (tornar o pacote público) no
+   resultado do workflow e em `docs/operations.md`.
+
 ## Testes executados
 | Teste | Onde | Resultado |
 |---|---|---|
@@ -74,7 +92,11 @@ atualizado com o mecanismo concreto.
 3. Disparar manualmente o workflow `build-images` no GitHub com `push=true`
    para publicar a imagem no GHCR pela primeira vez (ação que só você pode
    autorizar) e copiar o digest impresso para `CDW_TOOLS_IMAGE`.
-4. `make deploy` para subir os perfis escolhidos na VM.
+4. **Tornar o pacote público** (o GHCR cria como privado na primeira
+   publicação, e a VM não autentica no GHCR): `github.com/<owner>?tab=packages`
+   → `cloud-workstation-dev` → *Package settings* → *Change visibility* →
+   *Public*.
+5. `make deploy` para subir os perfis escolhidos na VM.
 
 ## Para a Fase 4
 Persistência e backup (restic) independente da cobrança da Hetzner — a

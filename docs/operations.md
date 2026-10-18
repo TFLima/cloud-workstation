@@ -45,7 +45,12 @@
   `build-images.yml` (workflow manual; nunca publica sem alguém disparar
   `push=true`). Antes do primeiro `make deploy` com esse perfil, defina
   `CDW_TOOLS_IMAGE=ghcr.io/<owner>/cloud-workstation-dev@sha256:<digest>`
-  no `.env` local (o digest sai do resultado do workflow).
+  no `.env` local (o digest sai do resultado do workflow). **O GHCR cria o
+  pacote como privado na primeira publicação** e a VM não autentica no GHCR
+  (a imagem é pensada para ser pública, sem token na VM); torne-o público em
+  `github.com/<owner>?tab=packages` → `cloud-workstation-dev` → *Package
+  settings* → *Change visibility* → *Public* antes do primeiro `make deploy`
+  com o perfil `tools`.
 - **PostgreSQL/Redis**: perfis `db`/`cache` (ou `full` para tudo); defina
   `POSTGRES_PASSWORD` no `.env` local antes de usá-los. As portas só ficam em
   `127.0.0.1` na VM — acesse por túnel SSH (`LocalForward 5432 127.0.0.1:5432`).

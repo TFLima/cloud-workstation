@@ -201,6 +201,10 @@ step_agents() {
 
 	# Symlinks em /usr/local/bin (sempre no PATH, interativo ou não; um rc de
 	# shell não serve porque "ssh host comando" não é nem login nem interativo).
+	# O codex é um script "#!/usr/bin/env node": sem "node" nesse mesmo PATH,
+	# ele falha com "node: No such file or directory" (claude já é um binário
+	# nativo, sem essa dependência, mas symlinkamos o node mesmo assim).
+	ln -sf "$AGENTS_NODE_DIR/bin/node" /usr/local/bin/node
 	local bin
 	for bin in claude codex; do
 		if [[ -x "$npm_prefix/bin/$bin" ]]; then
