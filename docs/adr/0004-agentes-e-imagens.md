@@ -1,13 +1,21 @@
 # ADR-0004 — Agentes de programação, imagens e GHCR
 
-- Status: proposto
-- Data: 2026-10-17
+- Status: aceito
+- Data: 2026-10-17 (mecanismo de instalação detalhado em 2026-10-18)
 
 ## Decisão
 - **Agentes no host (usuário não-root), não na imagem.** Claude Code e Codex
   instalados pelo método oficial de cada um no bootstrap; o login é feito pelo
   operador interativamente via SSH. Credenciais nunca entram em imagem, Git ou
   log; persistem apenas no backup restic criptografado.
+- **Mecanismo**: `scripts/bootstrap.sh` baixa o binário oficial do Node.js
+  (nodejs.org, com SHA-256 conferido, o mesmo método já usado em
+  `docker/Dockerfile.dev`) para `/usr/local/cdw-agents-node`, só para rodar o
+  `npm install -g` dos pacotes oficiais `@anthropic-ai/claude-code` e
+  `@openai/codex` (versões fixadas) no `$HOME` do usuário não-root, com
+  `npm_config_prefix` isolado em `~/.local/share/cdw-agents`. Idempotente via
+  um arquivo-marcador com as versões instaladas; roda de novo só quando as
+  versões fixadas mudam.
 - **Imagem de ferramentas** (`docker/Dockerfile.dev`: Git, PHP/Composer, Node,
   Python) construída somente pelo GitHub Actions com `GITHUB_TOKEN`
   (`packages: write`) e publicada em `ghcr.io/<owner>/cdw-dev` com tags

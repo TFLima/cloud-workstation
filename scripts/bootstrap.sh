@@ -24,6 +24,14 @@ COMPOSE_VERSION="5.6.0-1~ubuntu.24.04~noble"
 BUILDX_VERSION="0.38.0-1~ubuntu.24.04~noble"
 DOCKER_GPG_FINGERPRINT="9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
 
+# Node.js (binário oficial de nodejs.org, não um repositório de terceiros)
+# usado só para instalar os agentes via npm; versões conferidas em 18/10/2026.
+AGENTS_NODE_VERSION="24.22.0"
+AGENTS_NODE_SHA256="cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008"
+CLAUDE_CODE_VERSION="2.1.302"
+CODEX_VERSION="0.163.0"
+AGENTS_NODE_DIR="/usr/local/cdw-agents-node"
+
 BASE_PACKAGES=(ca-certificates curl gnupg git jq make openssh-server ufw unattended-upgrades restic tmux htop unzip)
 
 export DEBIAN_FRONTEND=noninteractive
@@ -145,6 +153,69 @@ step_user() {
 	install -d -m 0755 -o "$CDW_USER" -g "$CDW_USER" "$home/work"
 }
 
+step_agents() {
+	log "Claude Code e Codex CLI (ADR-0004: no host, não na imagem; sem credenciais)"
+	local home npm_prefix marker want
+	home="$(getent passwd "$CDW_USER" | cut -d: -f6)"
+	npm_prefix="$home/.local/share/cdw-agents"
+	marker="$npm_prefix/versions-installed"
+	want="claude-code=$CLAUDE_CODE_VERSION codex=$CODEX_VERSION"
+	if [[ -f "$marker" ]] && [[ "$(cat "$marker")" == "$want" ]]; then
+		return 0
+	fi
+
+	if [[ ! -x "$AGENTS_NODE_DIR/bin/node" ]]; then
+		log "node.js oficial (só para instalar os agentes via npm)"
+		local arch node_arch tmp
+		arch="$(dpkg --print-architecture)"
+		case "$arch" in
+		amd64) node_arch=x64 ;;
+		arm64) node_arch=arm64 ;;
+		*)
+			log "arquitetura não suportada para os agentes: $arch"
+			return 1
+			;;
+		esac
+		tmp="$(mktemp)"
+		curl -fsSL -o "$tmp" "https://nodejs.org/dist/v${AGENTS_NODE_VERSION}/node-v${AGENTS_NODE_VERSION}-linux-${node_arch}.tar.xz"
+		if [[ "$node_arch" == "x64" ]]; then
+			echo "${AGENTS_NODE_SHA256}  $tmp" | sha256sum -c -
+		fi
+		install -d -m 0755 "$AGENTS_NODE_DIR"
+		tar -xJf "$tmp" -C "$AGENTS_NODE_DIR" --strip-components=1
+		rm -f "$tmp"
+	fi
+
+	install -d -m 0755 -o "$CDW_USER" -g "$CDW_USER" "$npm_prefix"
+	log "instalando @anthropic-ai/claude-code@$CLAUDE_CODE_VERSION e @openai/codex@$CODEX_VERSION para $CDW_USER"
+	# su -l limpa o ambiente; numa VM sem proxy de saída isso não muda nada,
+	# mas repassamos um eventual proxy de rede (ex.: redes corporativas) em vez
+	# de depender de ele ter sido herdado.
+	local proxy_env="" var
+	for var in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; do
+		[[ -n "${!var:-}" ]] && proxy_env+="$(printf '%q=%q ' "$var" "${!var}")"
+	done
+	su - "$CDW_USER" -c "env $proxy_env PATH=\"$AGENTS_NODE_DIR/bin:\$PATH\" npm_config_prefix=\"$npm_prefix\" \
+		npm install -g --no-fund --no-audit \
+		'@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION' '@openai/codex@$CODEX_VERSION'"
+
+	# Symlinks em /usr/local/bin (sempre no PATH, interativo ou não; um rc de
+	# shell não serve porque "ssh host comando" não é nem login nem interativo).
+	# O codex é um script "#!/usr/bin/env node": sem "node" nesse mesmo PATH,
+	# ele falha com "node: No such file or directory" (claude já é um binário
+	# nativo, sem essa dependência, mas symlinkamos o node mesmo assim).
+	ln -sf "$AGENTS_NODE_DIR/bin/node" /usr/local/bin/node
+	local bin
+	for bin in claude codex; do
+		if [[ -x "$npm_prefix/bin/$bin" ]]; then
+			ln -sf "$npm_prefix/bin/$bin" "/usr/local/bin/$bin"
+		fi
+	done
+	printf '%s\n' "$want" >"$marker"
+	chown "$CDW_USER:$CDW_USER" "$marker"
+	log "agentes instalados; login (claude / codex) é feito pelo operador via SSH, nunca embutido aqui"
+}
+
 step_ssh() {
 	log "sshd: somente chave, sem root"
 	local conf=/etc/ssh/sshd_config.d/10-cdw-hardening.conf
@@ -201,6 +272,7 @@ log "início (versão $CDW_BOOTSTRAP_VERSION)"
 step_base_packages
 step_docker
 step_user
+step_agents
 step_ssh
 step_firewall
 step_updates

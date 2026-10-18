@@ -37,7 +37,7 @@ connect-print: ## Mostra o comando SSH e o bloco para o VS Code Remote - SSH
 destroy-vm: ## Destrói a VM SEM backup (pede confirmação digitada)
 	@bash scripts/destroy-vm.sh
 
-deploy: ## (Fase 3) Sobe stacks Docker por perfil
+deploy: ## Sobe/atualiza stacks Docker na VM pelos perfis (CDW_COMPOSE_PROFILES)
 	@bash scripts/deploy.sh
 
 backup: ## (Fase 4) Backup criptografado e verificado
@@ -72,7 +72,8 @@ validate-tf: ## init sem backend + validate
 	$(TF) -chdir=$(TF_DIR) validate
 
 validate-compose: ## docker compose config com todos os perfis
-	POSTGRES_PASSWORD=validacao-local docker compose -f docker/compose.yaml --profile full config -q
+	POSTGRES_PASSWORD=validacao-local CDW_TOOLS_IMAGE=ghcr.io/example/cloud-workstation-dev@sha256:0000000000000000000000000000000000000000000000000000000000000 \
+		docker compose -f docker/compose.yaml --profile full config -q
 
 test: ## Testes automatizados locais
 	bash tests/run.sh

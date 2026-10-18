@@ -1,0 +1,79 @@
+# Build e publicação da imagem de ferramentas (ADR-0004). Só roda quando
+# disparada manualmente (workflow_dispatch) por alguém com acesso ao
+# repositório: nunca em push/pull_request, para nunca publicar sem intenção
+# explícita do operador.
+name: build-images
+
+on:
+  workflow_dispatch:
+    inputs:
+      push:
+        description: "Publicar no GHCR (false = só builda e valida, não publica)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tools-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Metadados da imagem (tags imutáveis)
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/cloud-workstation-dev
+          tags: |
+            type=sha,format=long,prefix=sha-
+            type=raw,value=latest,enable=${{ inputs.push }}
+
+      - name: Instalar Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Login no GHCR
+        if: ${{ inputs.push }}
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (e publicação, se solicitada)
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: docker
+          file: docker/Dockerfile.dev
+          push: ${{ inputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Resultado
+        run: |
+          if [[ "${{ inputs.push }}" == "true" ]]; then
+            owner="${{ github.repository_owner }}"
+            digest="${{ steps.build.outputs.digest }}"
+            echo "Publicado. Digest: $digest"
+            echo "Defina no .env local:"
+            echo "CDW_TOOLS_IMAGE=ghcr.io/$owner/cloud-workstation-dev@$digest"
+            echo
+            echo "ATENÇÃO: o GHCR cria o pacote como PRIVADO na primeira publicação."
+            echo "A VM não autentica no GHCR (ADR-0004: imagem pública, sem token na VM)."
+            echo "Na primeira vez, torne o pacote público manualmente antes do 'make deploy':"
+            echo "  github.com/$owner?tab=packages -> cloud-workstation-dev ->"
+            echo "  Package settings -> Change visibility -> Public"
+          else
+            echo "Build validado, nada publicado (push=false). Rode de novo com push=true para publicar no GHCR."
+          fi

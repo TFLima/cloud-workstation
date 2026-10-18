@@ -1,10 +1,33 @@
 # Serviços de apoio por perfil. Regras (verificadas em tests/static):
 #  - portas publicadas somente em 127.0.0.1 (acesso via túnel SSH);
 #  - nenhum segredo literal; senhas vêm do ambiente/arquivo .env local da VM;
-#  - imagens oficiais com tag fixa (digests fixados na Fase 3).
+#  - imagens oficiais com tag fixa. Pinar por digest exigiria resolvê-lo contra
+#    o Docker Hub a partir de uma rede confiável (não deu para confirmar um
+#    digest correto a partir deste ambiente de build na Fase 3 -- ver
+#    docs/phase-3-report.md); a tag completa (ex.: postgres:17.6-bookworm) já
+#    fixa a versão, só não trava o conteúdo exato caso a tag seja reconstruída.
 name: cdw
 
 services:
+  tools:
+    # Imagem construída a partir de docker/Dockerfile.dev (ADR-0004) pelo
+    # workflow build-images.yml e publicada manualmente no GHCR; nunca
+    # construída nem publicada a partir da VM.
+    # ghcr.io/<owner>/cloud-workstation-dev@sha256:<digest>, definido no .env
+    # da VM após publicar a imagem pelo workflow build-images.yml.
+    image: ${CDW_TOOLS_IMAGE:?defina CDW_TOOLS_IMAGE no .env da VM}
+    profiles: ["tools", "full"]
+    init: true
+    working_dir: /home/dev/work
+    volumes:
+      - ${CDW_PROJECTS_DIR:-/home/dev/work}:/home/dev/work
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+    command: ["sleep", "infinity"]
+    restart: unless-stopped
+
   postgres:
     image: postgres:17.6-bookworm
     profiles: ["db", "full"]

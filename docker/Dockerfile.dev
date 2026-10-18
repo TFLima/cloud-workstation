@@ -1,0 +1,70 @@
+# Imagem de ferramentas do Cloud Dev Workstation (ADR-0004): sem código
+# privado, sem segredos e sem autenticação embutida. Publicada no GHCR por
+# um workflow do GitHub Actions, nunca a partir da VM.
+FROM ubuntu:24.04
+
+# Versões fixadas na Fase 3 (conferidas em 18/10/2026 em archive.ubuntu.com e
+# nodejs.org a partir deste próprio ambiente de build).
+ARG PHP_VERSION=8.3.6-0ubuntu0.24.04.11
+ARG COMPOSER_VERSION=2.7.1-2
+ARG NODE_VERSION=24.22.0
+ARG NODE_SHA256=cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008
+
+ENV DEBIAN_FRONTEND=noninteractive \
+	LANG=C.UTF-8 \
+	NPM_CONFIG_UPDATE_NOTIFIER=false \
+	PATH=/usr/local/node/bin:$PATH
+
+RUN apt-get update -q && apt-get install -y --no-install-recommends \
+		ca-certificates curl git jq make unzip zip tmux htop xz-utils \
+		python3 python3-pip python3-venv \
+		"php8.3-cli=${PHP_VERSION}" "php8.3-common=${PHP_VERSION}" \
+		"php8.3-mbstring=${PHP_VERSION}" "php8.3-xml=${PHP_VERSION}" \
+		"php8.3-curl=${PHP_VERSION}" "php8.3-zip=${PHP_VERSION}" \
+		"php8.3-pgsql=${PHP_VERSION}" "php8.3-sqlite3=${PHP_VERSION}" \
+		"composer=${COMPOSER_VERSION}" \
+	&& rm -rf /var/lib/apt/lists/*
+
+# Node.js: binário oficial de nodejs.org (não um repositório de terceiros),
+# com o SHA-256 publicado conferido antes de extrair.
+RUN set -eu; \
+	arch="$(dpkg --print-architecture)"; \
+	case "$arch" in amd64) node_arch=x64 ;; arm64) node_arch=arm64 ;; *) echo "arquitetura não suportada: $arch" >&2; exit 1 ;; esac; \
+	url="https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${node_arch}.tar.xz"; \
+	curl -fsSL -o /tmp/node.tar.xz "$url"; \
+	if [ "$node_arch" = "x64" ]; then \
+	echo "${NODE_SHA256}  /tmp/node.tar.xz" | sha256sum -c -; \
+	fi; \
+	mkdir -p /usr/local/node; \
+	tar -xJf /tmp/node.tar.xz -C /usr/local/node --strip-components=1; \
+	rm -f /tmp/node.tar.xz; \
+	/usr/local/node/bin/node --version
+
+# Claude Code e Codex CLI NÃO entram nesta imagem (ADR-0004): ficam no host
+# (scripts/bootstrap.sh), onde o operador autentica interativamente por SSH.
+
+ARG USERNAME=dev
+ARG USER_UID=1000
+ARG USER_GID=1000
+# ubuntu:24.04 já traz um usuário/grupo "ubuntu" nesse mesmo UID/GID 1000;
+# em vez de escolher outro UID (quebrando a convenção de UID 1000 = primeiro
+# usuário comum, útil para bind mounts), renomeamos o existente.
+RUN existing_user="$(getent passwd "$USER_UID" | cut -d: -f1)"; \
+	existing_group="$(getent group "$USER_GID" | cut -d: -f1)"; \
+	if [ -n "$existing_user" ] && [ "$existing_user" != "$USERNAME" ]; then \
+		usermod -l "$USERNAME" -d "/home/$USERNAME" -m -G "" "$existing_user"; \
+	fi; \
+	if [ -n "$existing_group" ] && [ "$existing_group" != "$USERNAME" ]; then \
+		groupmod -n "$USERNAME" "$existing_group"; \
+	fi; \
+	if [ -z "$existing_user" ]; then \
+		groupadd --gid "$USER_GID" "$USERNAME" 2>/dev/null || true; \
+		useradd --uid "$USER_UID" --gid "$USER_GID" --create-home --shell /bin/bash "$USERNAME"; \
+	fi
+
+LABEL org.opencontainers.image.source="https://github.com/TFLima/cloud-workstation" \
+	org.opencontainers.image.description="Imagem de ferramentas do Cloud Dev Workstation (sem código privado nem segredos)"
+
+USER $USERNAME
+WORKDIR /home/$USERNAME/work
+CMD ["sleep", "infinity"]
