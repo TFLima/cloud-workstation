@@ -59,7 +59,7 @@ if [[ -d "$restored_home/work" ]]; then
 		chgrp -R "$WORK_GROUP" "$HOME/work"
 		chmod -R g+rwX "$HOME/work"
 		find "$HOME/work" -type d -exec chmod g+s {} +
-		find "$HOME/work" -type d -exec setfacl -m d:g::rwx {} + 2>/dev/null ||
+		find "$HOME/work" -type d -exec setfacl -m g::rwx,d:g::rwx {} + 2>/dev/null ||
 			echo "[restore] AVISO: sem suporte a ACL em ~/work; arquivos novos podem ficar só legíveis ao grupo" >&2
 	fi
 else

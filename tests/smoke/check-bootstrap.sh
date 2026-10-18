@@ -51,7 +51,7 @@ assert_status "700" "$(stat -c '%a' "$agent_home")" "home de $agent é privado (
 assert_status "711" "$(stat -c '%a' "$home")" "home de $user só atravessável (0711)"
 # Caminhos absolutos: este script roda como o usuário do CI, e o sudo pode
 # manter o HOME dele em vez do HOME do usuário de destino.
-sudo -u "$user" sh -c "umask 077 && echo segredo > '$home/segredo-teste'"
+sudo -u "$user" sh -c "echo segredo > '$home/segredo-teste' && chmod 0600 '$home/segredo-teste'"
 if sudo -u "$agent" cat "$home/segredo-teste" >/dev/null 2>&1; then
 	flunk "$agent lê arquivo 0600 de $user"
 	sudo ls -ln "$home/segredo-teste" || true

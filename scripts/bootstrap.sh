@@ -207,9 +207,9 @@ step_user() {
 	# nada dele; arquivos sensíveis do operador são 0600/0700.
 	chmod 0711 "$home"
 	install -d -m 2775 -o "$CDW_USER" -g "$CDW_WORK_GROUP" "$work"
-	# ACL padrão: arquivos novos em ~/work saem graváveis pelo grupo, qualquer
+	# ACL (grupo dono e padrão): arquivos novos em ~/work saem graváveis pelo grupo, qualquer
 	# que seja o umask de quem os cria (editor do operador, git do agente).
-	setfacl -m "d:g::rwx" "$work" || log "AVISO: sem suporte a ACL em $work; arquivos novos podem ficar só legíveis ao grupo"
+	setfacl -m "g::rwx,d:g::rwx" "$work" || log "AVISO: sem suporte a ACL em $work; arquivos novos podem ficar só legíveis ao grupo"
 }
 
 step_agents() {
