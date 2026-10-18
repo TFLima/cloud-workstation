@@ -49,24 +49,42 @@ if sudo -u "$agent" sudo -n true >/dev/null 2>&1; then flunk "$agent consegue us
 if sudo -u "$agent" docker info >/dev/null 2>&1; then flunk "$agent acessa o daemon do Docker"; else pass "$agent não acessa o daemon do Docker"; fi
 assert_status "700" "$(stat -c '%a' "$agent_home")" "home de $agent é privado (0700)"
 assert_status "711" "$(stat -c '%a' "$home")" "home de $user só atravessável (0711)"
-sudo -u "$user" sh -c 'umask 077 && echo segredo > "$HOME/segredo-teste"'
-if sudo -u "$agent" cat "$home/segredo-teste" >/dev/null 2>&1; then flunk "$agent lê arquivo 0600 de $user"; else pass "$agent não lê arquivo 0600 de $user"; fi
+# Caminhos absolutos: este script roda como o usuário do CI, e o sudo pode
+# manter o HOME dele em vez do HOME do usuário de destino.
+sudo -u "$user" sh -c "umask 077 && echo segredo > '$home/segredo-teste'"
+if sudo -u "$agent" cat "$home/segredo-teste" >/dev/null 2>&1; then
+	flunk "$agent lê arquivo 0600 de $user"
+	sudo ls -ln "$home/segredo-teste" || true
+	sudo -u "$agent" id || true
+else
+	pass "$agent não lê arquivo 0600 de $user"
+fi
 if sudo -u "$agent" ls "$home" >/dev/null 2>&1; then flunk "$agent lista o home de $user"; else pass "$agent não lista o home de $user"; fi
 sudo -u "$user" rm -f "$home/segredo-teste"
 if sudo -u "$user" ls "$agent_home" >/dev/null 2>&1; then flunk "$user lista o home de $agent sem sudo"; else pass "$user não lista o home de $agent sem sudo"; fi
 
 # ~/work é compartilhado: cada um grava e o outro continua editando.
-sudo -u "$user" sh -c 'echo do-operador > "$HOME/work/do-operador.txt"'
+sudo -u "$user" sh -c "echo do-operador > '$home/work/do-operador.txt'"
 sudo -u "$agent" sh -c "echo do-agente > '$home/work/do-agente.txt'" || true
 if sudo -u "$agent" sh -c "echo mais >> '$home/work/do-operador.txt'" 2>/dev/null; then pass "$agent edita arquivo criado por $user em ~/work"; else flunk "$agent não edita arquivo criado por $user em ~/work"; fi
 if sudo -u "$user" sh -c "echo mais >> '$home/work/do-agente.txt'" 2>/dev/null; then pass "$user edita arquivo criado por $agent em ~/work"; else flunk "$user não edita arquivo criado por $agent em ~/work"; fi
 sudo -u "$user" rm -f "$home/work/do-operador.txt" "$home/work/do-agente.txt"
 
+if ((TESTS_FAILED > 0)); then
+	echo "diagnóstico do isolamento:"
+	sudo -u "$agent" id || true
+	sudo -u "$agent" sh -c 'echo "HOME do agente sob sudo: $HOME"' || true
+	sudo -u "$user" sh -c 'echo "HOME do operador sob sudo: $HOME"' || true
+	sudo ls -ld "$home" "$home/work" "$agent_home" || true
+	sudo ls -la "$home" || true
+	sudo getfacl -p "$home/work" || true
+fi
+
 echo "agentes instalados:"
 npm_prefix="$agent_home/.local/share/cdw-agents"
-assert_status "$agent" "$(stat -c '%U' "$agent_home/.local")" "o diretório .local de $agent pertence a $agent"
-if [[ -x "$npm_prefix/bin/claude" ]]; then pass "claude instalado para $agent"; else flunk "claude ausente em $npm_prefix/bin"; fi
-if [[ -x "$npm_prefix/bin/codex" ]]; then pass "codex instalado para $agent"; else flunk "codex ausente em $npm_prefix/bin"; fi
+assert_status "$agent" "$(sudo stat -c '%U' "$agent_home/.local")" "o diretório .local de $agent pertence a $agent"
+if sudo test -x "$npm_prefix/bin/claude"; then pass "claude instalado para $agent"; else flunk "claude ausente em $npm_prefix/bin"; fi
+if sudo test -x "$npm_prefix/bin/codex"; then pass "codex instalado para $agent"; else flunk "codex ausente em $npm_prefix/bin"; fi
 if [[ -L /usr/local/bin/node ]]; then pass "node symlinkado em /usr/local/bin (o codex é um script \"env node\")"; else flunk "node ausente em /usr/local/bin"; fi
 if [[ -x /usr/local/bin/cdw-agent ]]; then pass "cdw-agent instalado"; else flunk "cdw-agent ausente"; fi
 
@@ -74,8 +92,10 @@ if [[ -x /usr/local/bin/cdw-agent ]]; then pass "cdw-agent instalado"; else flun
 # não-login ("ssh host comando"), e roda de verdade (não só "command -v"):
 # um "env node" sem node no PATH resolve mas falha ao executar.
 op_env=(env -i "PATH=/usr/local/bin:/usr/bin:/bin" "HOME=$home")
-assert_status "$agent" "$(sudo -u "$user" "${op_env[@]}" cdw-agent id -un 2>/dev/null || true)" "cdw-agent roda o comando como $agent"
-assert_status "$home/work" "$(cd "$home/work" && sudo -u "$user" "${op_env[@]}" sh -c 'cd ~/work && cdw-agent pwd' 2>/dev/null || true)" "cdw-agent mantém o diretório atual"
+# O diretório atual do CI (o checkout) não é acessível ao operador nem ao
+# agente; como numa sessão SSH, o comando começa no home do operador.
+assert_status "$agent" "$(sudo -u "$user" "${op_env[@]}" sh -c 'cd ~/work && cdw-agent id -un' 2>/dev/null || true)" "cdw-agent roda o comando como $agent"
+assert_status "$home/work" "$(sudo -u "$user" "${op_env[@]}" sh -c 'cd ~/work && cdw-agent pwd' 2>/dev/null || true)" "cdw-agent mantém o diretório atual"
 for bin in claude codex; do
 	if sudo -u "$user" "${op_env[@]}" sh -c "command -v $bin" >/dev/null 2>&1; then
 		flunk "$bin resolve direto para $user (deveria exigir cdw-agent)"
