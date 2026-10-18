@@ -40,13 +40,13 @@ destroy-vm: ## Destrói a VM SEM backup (pede confirmação digitada)
 deploy: ## Sobe/atualiza stacks Docker na VM pelos perfis (CDW_COMPOSE_PROFILES)
 	@bash scripts/deploy.sh
 
-backup: ## (Fase 4) Backup criptografado e verificado
+backup: ## Dump + snapshot restic criptografado (destino em RESTIC_REPOSITORY)
 	@bash scripts/backup.sh
 
 down: ## (Fase 5) Backup, confirmação e destruição segura
 	@bash scripts/destroy-safe.sh
 
-restore: ## (Fase 4) Restaura dados em VM nova
+restore: ## Restaura o snapshot restic na VM atual (pede confirmação)
 	@bash scripts/restore.sh
 
 doctor: ## Diagnóstico de SSH, Docker, disco, memória, rede e portas

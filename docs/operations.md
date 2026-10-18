@@ -25,6 +25,8 @@
 | VS Code | `make connect-print` | Copie o bloco `Host cdw` para `C:\Users\<você>\.ssh\config`. |
 | Diagnóstico | `make doctor` | Falha se houver porta exposta, SSH com senha, disco cheio etc. |
 | Subir ferramentas/serviços | `make deploy` | Perfis em `CDW_COMPOSE_PROFILES` (padrão `tools`); ver abaixo. |
+| Backup | `make backup` | Dumps + snapshot restic criptografado fora da Hetzner; ver "Backup e restore" abaixo. |
+| Restore | `make restore` | Restaura o snapshot restic na VM atual; pede confirmação. |
 
 ## VS Code Remote - SSH (Windows)
 - O VS Code usa o OpenSSH do Windows. A chave privada precisa existir no
@@ -57,6 +59,44 @@
 - `make deploy` envia `docker/compose.yaml` e um `.env` (gerado a partir do
   `.env` local, nunca impresso) para a VM e roda `docker compose up -d` com
   os perfis escolhidos. Rodar de novo atualiza o que mudou.
+
+## Backup e restore (ADR-0003)
+- **Preparação única**: crie um bucket no Cloudflare R2 (recomendado; sem
+  custo de egress, 10 GB/mês grátis) e um token de API com acesso só a esse
+  bucket. No `.env` local:
+  ```
+  RESTIC_REPOSITORY=s3:https://<account-id>.r2.cloudflarestorage.com/<bucket>
+  AWS_ACCESS_KEY_ID=<access key do token>
+  AWS_SECRET_ACCESS_KEY=<secret key do token>
+  AWS_DEFAULT_REGION=auto
+  ```
+  Crie a senha do repositório restic (mínimo 16 caracteres) e guarde uma
+  cópia no gerenciador de senhas; **sem ela não há restore**:
+  ```bash
+  install -d -m 700 ~/.config/cdw
+  (umask 077; openssl rand -base64 32 > ~/.config/cdw/restic-password)
+  ```
+- **`make backup`**: na VM atual, faz `pg_dump -Fc` do PostgreSQL (se o
+  perfil `db`/`full` estiver no ar) e `redis-cli SAVE` + cópia do `dump.rdb`
+  (se `cache`/`full` estiver no ar), grava um manifesto (data, hostname,
+  versões) e envia tudo isso mais `~/work` e `~/.claude`/`~/.codex` como um
+  único snapshot `restic backup`. Depois aplica a retenção (`forget --prune`,
+  configurável por `CDW_BACKUP_KEEP_DAILY`/`_WEEKLY`/`_MONTHLY` no `.env`
+  local) e verifica integridade com `restic check --read-data-subset=5%`.
+  As credenciais do restic são enviadas por stdin via SSH a cada execução
+  (nunca gravadas na VM) e apagadas (`shred`) ao final, mesmo se o backup
+  falhar.
+- **`make restore`**: pede confirmação digitada (`restaurar`, pois
+  sobrescreve dados da VM atual). Restaura o snapshot (`CDW_RESTORE_SNAPSHOT`
+  no `.env` local; padrão o mais recente) para uma área de preparo temporária
+  e só então aplica: `~/work`/dotfiles por `cp -a` (mescla; não apaga o que
+  não está no snapshot) e os bancos de dados (`pg_restore --clean --if-exists`
+  e substituição do `dump.rdb` do Redis seguida de `docker compose restart
+  redis`) — só se o serviço correspondente estiver no ar (rode `make deploy`
+  antes, se necessário). Compara a versão do bootstrap no manifesto do
+  snapshot com a da VM atual e avisa (sem bloquear) em caso de divergência.
+  Um dump de banco que não pôde ser aplicado (serviço fora do ar) fica em
+  `~/restore-pending/` na VM para aplicação manual.
 
 ## Mudança de IP do operador
 O firewall libera a porta 22 só para o IP detectado (ou `TF_VAR_admin_cidr`).

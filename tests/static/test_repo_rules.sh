@@ -45,6 +45,15 @@ secret_re='(hcloud_token|password|secret|token)[[:space:]]*[:=][[:space:]]*["'\'
 hits="$(grep -rniE "$secret_re" --exclude-dir=.git --exclude-dir=.terraform --exclude=test_repo_rules.sh . || true)"
 if [[ -z "$hits" ]]; then pass "nenhum segredo aparente no repositório"; else flunk "possíveis segredos encontrados (arquivos: $(cut -d: -f1 <<<"$hits" | sort -u | tr '\n' ' '))"; fi
 
+# Regressão: o Compose interpola TODO serviço declarado, mesmo um fora do(s)
+# perfil(is) pedidos; um perfil sem "tools" (e sem variáveis do Postgres) não
+# pode falhar por causa de CDW_TOOLS_IMAGE/POSTGRES_PASSWORD não definidos.
+if env -u CDW_TOOLS_IMAGE -u POSTGRES_PASSWORD docker compose -f docker/compose.yaml --profile cache config -q 2>/tmp/compose-cache-only.err; then
+	pass "perfil cache sozinho não exige CDW_TOOLS_IMAGE/POSTGRES_PASSWORD"
+else
+	flunk "perfil cache sozinho falhou: $(cat /tmp/compose-cache-only.err)"
+fi
+
 for f in .env '*.tfstate' 'terraform.tfvars'; do
 	if grep -qxF "$f" .gitignore; then pass ".gitignore cobre $f"; else flunk ".gitignore não cobre $f"; fi
 done

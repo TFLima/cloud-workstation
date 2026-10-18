@@ -30,6 +30,12 @@ expand_path() {
 
 has_cmd() { command -v "$1" >/dev/null 2>&1; }
 
+# Aspas simples seguras para um valor que será lido por "source" no Bash:
+# evita tanto a expansão de "$" quanto a quebra por aspas embutidas.
+shell_quote() {
+	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
 # Retorna 0 se a variável estiver definida e não vazia; nunca imprime o valor.
 env_is_set() {
 	local name="$1"

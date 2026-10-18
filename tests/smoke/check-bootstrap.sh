@@ -29,6 +29,12 @@ for cmd in git jq make restic tmux; do
 	if command -v "$cmd" >/dev/null; then pass "pacote $cmd"; else flunk "pacote $cmd ausente"; fi
 done
 
+restic_version="${3:-}"
+if [[ -n "$restic_version" ]]; then
+	assert_status "$restic_version" "$(dpkg-query -W -f='${Version}' restic 2>/dev/null || true)" "restic na versão fixada"
+	if apt-mark showhold | grep -qx restic; then pass "restic retido (apt-mark hold)"; else flunk "restic sem apt-mark hold"; fi
+fi
+
 home="$(getent passwd "$user" | cut -d: -f6)"
 npm_prefix="$home/.local/share/cdw-agents"
 

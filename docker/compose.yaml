@@ -15,7 +15,12 @@ services:
     # construída nem publicada a partir da VM.
     # ghcr.io/<owner>/cloud-workstation-dev@sha256:<digest>, definido no .env
     # da VM após publicar a imagem pelo workflow build-images.yml.
-    image: ${CDW_TOOLS_IMAGE:?defina CDW_TOOLS_IMAGE no .env da VM}
+    # Sem ":?" aqui: o Compose interpola TODO serviço declarado no arquivo,
+    # mesmo um fora do(s) perfil(is) pedidos (ex.: "--profile db" ainda falha
+    # a interpolação de services.tools). A obrigatoriedade real de
+    # CDW_TOOLS_IMAGE quando o perfil tools/full é usado já é verificada em
+    # scripts/deploy.sh, antes de chamar o Compose.
+    image: ${CDW_TOOLS_IMAGE:-}
     profiles: ["tools", "full"]
     init: true
     working_dir: /home/dev/work
@@ -33,7 +38,11 @@ services:
     profiles: ["db", "full"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-dev}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env da VM}
+      # Sem ":?": o Compose interpola todo serviço do arquivo mesmo fora do
+      # perfil pedido (ver comentário equivalente em services.tools.image);
+      # a obrigatoriedade real quando o perfil db/full é usado já é
+      # verificada em scripts/deploy.sh antes de chamar o Compose.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
       POSTGRES_DB: ${POSTGRES_DB:-dev}
     ports:
       - "127.0.0.1:5432:5432"
@@ -53,7 +62,13 @@ services:
   redis:
     image: redis:7.4-bookworm
     profiles: ["cache", "full"]
-    command: ["redis-server", "--appendonly", "yes"]
+    # Sem "--appendonly yes": só RDB (pontos de "save" padrão da imagem).
+    # O backup (scripts/lib/backup-remote.sh) já faz "SAVE" + copia o
+    # dump.rdb; com AOF ligado, um restore (restaurar o dump.rdb e reiniciar)
+    # é ignorado, porque o Redis recarrega o AOF existente em vez do RDB
+    # copiado (achado real de revisão no PR da Fase 4) — testado neste
+    # sandbox com um container Redis real. RDB puro é consistente com o
+    # próprio método de backup usado aqui.
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -69,6 +84,10 @@ services:
           memory: 512m
     restart: unless-stopped
 
+# Rótulos "cdw.backup" documentam a convenção de backup por volume (Fase 4,
+# ADR-0003); scripts/lib/backup-remote.sh e restore-remote.sh implementam os
+# dois serviços concretos deste Compose (postgres via pg_dump, redis via
+# SAVE + cópia do dump.rdb), não um motor genérico guiado pelo rótulo.
 volumes:
   pgdata:
     labels:
