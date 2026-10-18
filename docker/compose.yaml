@@ -1,0 +1,55 @@
+# Serviços de apoio por perfil. Regras (verificadas em tests/static):
+#  - portas publicadas somente em 127.0.0.1 (acesso via túnel SSH);
+#  - nenhum segredo literal; senhas vêm do ambiente/arquivo .env local da VM;
+#  - imagens oficiais com tag fixa (digests fixados na Fase 3).
+name: cdw
+
+services:
+  postgres:
+    image: postgres:17.6-bookworm
+    profiles: ["db", "full"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env da VM}
+      POSTGRES_DB: ${POSTGRES_DB:-dev}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-bookworm
+    profiles: ["cache", "full"]
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+    labels:
+      cdw.backup: "pg_dump"
+  redisdata:
+    labels:
+      cdw.backup: "files"

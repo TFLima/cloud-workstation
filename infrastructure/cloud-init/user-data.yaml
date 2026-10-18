@@ -1,0 +1,3 @@
+#cloud-config
+# Bootstrap idempotente da VM: implementado na Fase 2.
+package_update: true

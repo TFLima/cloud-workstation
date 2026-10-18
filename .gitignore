@@ -1,0 +1,28 @@
+# Segredos e configuração local
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_*
+!id_*.pub
+secrets/
+
+# Estado e cache do OpenTofu/Terraform (estado fica fora do Git; ver ADR-0002)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.tfstate.lock.info
+*.auto.tfvars
+terraform.tfvars
+
+# Artefatos locais
+.cdw/
+*.log
