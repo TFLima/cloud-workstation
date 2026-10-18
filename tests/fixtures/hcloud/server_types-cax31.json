@@ -1,0 +1,29 @@
+{
+ "server_types": [
+  {
+   "name": "cax31",
+   "architecture": "arm",
+   "locations": [
+    {
+     "name": "nbg1",
+     "available": true,
+     "recommended": true,
+     "deprecation": null
+    }
+   ],
+   "prices": [
+    {
+     "location": "nbg1",
+     "price_hourly": {
+      "net": "0.0336",
+      "gross": "0.0336"
+     },
+     "price_monthly": {
+      "net": "20.99",
+      "gross": "20.99"
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -23,9 +23,11 @@ Preços oficiais pós-15/06/2026, Alemanha/Finlândia, sem IVA e sem IPv4
 - Hetzner Cloud, região padrão `nbg1` (alternativas `fsn1`, `hel1`).
 - `server_type` e `location` são variáveis, sem valor padrão codificado no módulo.
   Ordem de preferência documentada: `cx43` → `cpx42` → `ccx23`.
-- `make preflight`/`make plan` consultarão a API (`/server_types`, `/datacenters`)
-  para confirmar disponibilidade e preço no momento, e falharão com mensagem clara
-  se o tipo escolhido não estiver disponível.
+- `make plan` consulta a API (`GET /server_types?name=...`, campo
+  `locations[].available`, e `/pricing`) para confirmar disponibilidade e preço
+  no momento, tenta as alternativas de `CDW_SERVER_TYPE_FALLBACKS` e falha com
+  mensagem clara se nenhuma estiver disponível. O endpoint `/datacenters` não é
+  usado: foi removido pela Hetzner em 01/10/2026.
 - Imagem `ubuntu-24.04` oficial da Hetzner (não snapshot próprio).
 - Portabilidade: recursos específicos do provedor ficam isolados em
   `infrastructure/terraform/`; cloud-init e scripts não dependem da Hetzner.

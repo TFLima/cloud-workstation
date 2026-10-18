@@ -48,3 +48,20 @@ variable "name" {
   type        = string
   default     = "cdw"
 }
+
+variable "username" {
+  description = "Usuário não-root criado na VM."
+  type        = string
+  default     = "dev"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9_-]{1,30}$", var.username)) && var.username != "root"
+    error_message = "username deve ser um nome de usuário Linux válido e diferente de root."
+  }
+}
+
+variable "image" {
+  description = "Imagem oficial do provedor (não snapshot próprio)."
+  type        = string
+  default     = "ubuntu-24.04"
+}

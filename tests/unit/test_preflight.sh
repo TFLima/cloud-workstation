@@ -10,7 +10,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 FAKE_TOKEN="$(printf 'a%.0s' {1..64})"
 ssh-keygen -q -t ed25519 -N '' -f "$TMP/id_test" >/dev/null
-printf 'frase-de-teste\n' >"$TMP/passphrase"
+printf 'frase-de-teste-longa\n' >"$TMP/passphrase"
 chmod 600 "$TMP/passphrase"
 
 write_env() {
@@ -67,5 +67,11 @@ chmod 644 "$TMP/passphrase"
 run_preflight
 assert_status 1 "$STATUS" "passphrase do estado com permissão aberta é rejeitada"
 chmod 600 "$TMP/passphrase"
+
+write_env
+printf 'curta\n' >"$TMP/passphrase"
+run_preflight
+assert_status 1 "$STATUS" "passphrase do estado com menos de 16 caracteres é rejeitada"
+assert_not_contains "$OUT" "curta" "passphrase não aparece na saída"
 
 finish

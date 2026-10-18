@@ -1,0 +1,20 @@
+{
+ "pricing": {
+  "primary_ips": [
+   {
+    "type": "ipv4",
+    "prices": [
+     {
+      "location": "nbg1",
+      "price_hourly": {
+       "net": "0.0008"
+      },
+      "price_monthly": {
+       "net": "0.5000"
+      }
+     }
+    ]
+   }
+  ]
+ }
+}
