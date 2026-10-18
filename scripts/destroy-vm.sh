@@ -11,7 +11,10 @@ cdw_load_config
 cdw_setup_encryption
 tf_init
 tf_has_server || die "nenhuma VM no estado local; nada a destruir"
-cdw_export_tf_vars
+# Destruir não depende de SSH nem do IP atual do operador: usa valores
+# fictícios quando a chave local ou a rede não estão disponíveis, para que
+# perder a chave nunca trave o caminho de parar a cobrança.
+cdw_export_tf_vars_for_destroy
 
 name="$(tf_output server_name)"
 server_id="$(tf_output server_id)"

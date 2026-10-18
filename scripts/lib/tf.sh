@@ -109,3 +109,30 @@ cdw_ssh() {
 	# shellcheck disable=SC2029 # o comando remoto é intencionalmente passado como texto
 	ssh "${opts[@]}" "$target" "$@"
 }
+
+# Impressão digital estável da chave pública local (não sensível: é pública).
+cdw_local_key_fingerprint() {
+	cut -d' ' -f1-2 "$CDW_SSH_PUBLIC_KEY_FILE" | sha256sum | cut -d' ' -f1
+}
+
+# Variáveis para `tofu destroy`: nunca bloqueiam a destruição por falta da
+# chave local ou de rede, já que destruir não precisa de SSH nem do CIDR real.
+cdw_export_tf_vars_for_destroy() {
+	if [[ -f "$CDW_SSH_PUBLIC_KEY_FILE" ]]; then
+		TF_VAR_ssh_public_key="$(cat "$CDW_SSH_PUBLIC_KEY_FILE")"
+	else
+		warn "chave pública local não encontrada; usando um valor fictício só para permitir a destruição"
+		TF_VAR_ssh_public_key="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA destroy-placeholder"
+	fi
+	export TF_VAR_ssh_public_key
+	if [[ -z "${TF_VAR_admin_cidr:-}" ]]; then
+		local ip
+		ip="$(curl -fsS --max-time 10 "${CDW_IP_ECHO_URL:-https://api.ipify.org}" 2>/dev/null || true)"
+		if [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+			export TF_VAR_admin_cidr="$ip/32"
+		else
+			warn "não foi possível detectar seu IP; usando um CIDR fictício só para permitir a destruição"
+			export TF_VAR_admin_cidr="192.0.2.1/32"
+		fi
+	fi
+}
