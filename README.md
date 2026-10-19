@@ -7,7 +7,8 @@ backup externo verificado. Nada depende de snapshots do provedor.
 > Estado atual: **Fase 5 (ciclo de vida e custos)**. Todos os comandos do
 > plano original funcionam: `plan`, `up`, `status`, `connect`, `doctor`,
 > `deploy`, `backup`, `restore`, `down` e `audit`. Falta a Fase 6
-> (validação ponta a ponta contra infraestrutura real).
+> (validação ponta a ponta contra infraestrutura real); o roteiro está em
+> [`docs/phase-6-runbook.md`](docs/phase-6-runbook.md).
 
 ## Pré-requisitos (notebook Windows + WSL2 Ubuntu)
 - VS Code com a extensão Remote - SSH (Windows).
