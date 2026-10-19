@@ -71,7 +71,9 @@ tofu version
 ```
 A linha do `sha256sum` deve terminar com `OK`; se não, **pare** e não
 instale. O último comando deve mostrar `OpenTofu v` seguido da versão do
-arquivo. (Se o seu WSL2 for ARM, troque `amd64` por `arm64`.)
+arquivo. Este guia cobre computadores x86_64 (Intel/AMD), que são os
+suportados pelo lock do provider; em ARM não siga estes passos sem antes
+acrescentar `linux_arm64` ao lock.
 
 ### Passo 5: criar a chave SSH
 É a chave com a qual você entra na VM. Se você já tem `~/.ssh/id_ed25519.pub`
@@ -122,9 +124,13 @@ gerenciador de senhas:
 ```bash
 install -d -m 700 ~/.config/cdw
 (umask 077; openssl rand -base64 32 > ~/.config/cdw/state-passphrase)
-cat ~/.config/cdw/state-passphrase
+clip.exe < ~/.config/cdw/state-passphrase
 ```
-O `cat` mostra a frase uma vez, para você copiar para o gerenciador de senhas.
+O `clip.exe` copia a frase para a área de transferência do Windows **sem
+mostrá-la na tela**. Cole-a agora no gerenciador de senhas (por exemplo, numa
+nota "cdw estado") e, em seguida, copie qualquer outro texto para limpar a
+área de transferência. Nunca imprima essa frase com `cat` nem a cole em
+chats.
 
 ### Passo 9: conferir tudo
 ```bash
