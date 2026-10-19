@@ -11,6 +11,8 @@ backup externo verificado. Nada depende de snapshots do provedor.
 > [`docs/phase-6-runbook.md`](docs/phase-6-runbook.md).
 
 ## Pré-requisitos (notebook Windows + WSL2 Ubuntu)
+Passo a passo para iniciantes, com os comandos exatos: seção "Preparação" de
+[`docs/operations.md`](docs/operations.md). Em resumo:
 - VS Code com a extensão Remote - SSH (Windows).
 - No WSL2: `git`, `make`, `curl`, `jq`, `openssh-client`, OpenTofu
   (versão em `.opentofu-version`). `restic` roda só na VM (instalado pelo
