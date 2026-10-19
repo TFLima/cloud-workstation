@@ -27,8 +27,10 @@ passar de uma ou duas sessões; as VMs são cobradas por hora iniciada.
 Anote a hora de início de cada etapa para o registro de tempos.
 1. `make up` (digite `criar`). Anote o tempo até "bootstrap concluído".
 2. `make status` e `make doctor`: tudo verde, só a porta 22 aberta.
-3. `make audit`: aparecem VM, firewall, chave SSH e IPv4 com o rótulo
-   `project=cloud-dev-workstation`.
+3. `make audit`: aparecem VM, firewall e chave SSH com o rótulo
+   `project=cloud-dev-workstation`. O IPv4 primário é criado pela própria
+   VM e o OpenTofu não o rotula; ele pode não aparecer no `make audit`.
+   Confira-o no console da Hetzner (Primary IPs) e anote se apareceu.
 4. `make connect` e, depois, o VS Code Remote - SSH (`make connect-print`).
    Confira a impressão digital da primeira conexão.
 5. Na VM: `id agent` (sem `sudo`/`docker`), `ls -ld ~ ~agent ~/work`
@@ -38,17 +40,35 @@ Anote a hora de início de cada etapa para o registro de tempos.
 ## 2. Stack de exemplo
 O repositório só traz os serviços de infraestrutura (perfis `tools`, `db`,
 `cache`); **não há app de exemplo versionado**. Crie uma mínima em `~/work`
-(dentro da VM, fora do Git deste repositório):
-1. `make deploy` com o perfil `full`; confira `docker compose ps` saudável e
-   as portas só em `127.0.0.1`.
-2. Laravel: `composer create-project laravel/laravel demo-laravel`, com
-   `DB_*` e `REDIS_*` apontando para `127.0.0.1`; `php artisan migrate`.
-3. FastAPI: um `main.py` com uma rota que lê/escreve no PostgreSQL e no
-   Redis; `uvicorn main:app --host 127.0.0.1 --port 8000`.
-4. Frontend: `npm create vite@latest demo-front` consumindo a API FastAPI;
-   `npm run dev -- --host 127.0.0.1`.
-5. Acesse tudo por túnel SSH (`LocalForward`), sem abrir portas.
-6. Crie **dados de teste reconhecíveis**: linhas conhecidas no PostgreSQL
+(dentro da VM, fora do Git deste repositório). PHP, Composer, Python e Node
+só existem no contêiner `tools`, não no host da VM, então os comandos abaixo
+rodam **dentro dele**.
+1. `make deploy` com o perfil `full`; na VM, `cd ~/compose && docker compose
+   ps` deve mostrar tudo saudável, com portas publicadas só em `127.0.0.1`.
+2. Entre no contêiner: `cd ~/compose && docker compose exec tools bash`. O
+   `~/work` da VM aparece em `/home/dev/work`. Dentro dele, o PostgreSQL e o
+   Redis estão na rede do Compose: use os hosts `postgres` (porta 5432) e
+   `redis` (porta 6379), **não** `127.0.0.1`, que aqui é o próprio contêiner.
+3. Laravel: `composer create-project laravel/laravel demo-laravel`. A imagem
+   não tem a extensão `phpredis`; use `composer require predis/predis` e
+   `REDIS_CLIENT=predis`, com `DB_HOST=postgres` e `REDIS_HOST=redis`, e
+   `php artisan migrate`.
+4. FastAPI: `python3 -m venv .venv`, `pip install fastapi uvicorn
+   psycopg[binary] redis` e um `main.py` com uma rota que lê/escreve no
+   PostgreSQL e no Redis (mesmos hosts); `uvicorn main:app --host 0.0.0.0
+   --port 8000` (dentro do contêiner, `0.0.0.0` não expõe nada além da rede
+   do Compose).
+5. Frontend: `npm create vite@latest demo-front` consumindo a API;
+   `npm run dev -- --host 0.0.0.0`.
+6. Para validar sem navegador: `curl -fsS http://127.0.0.1:8000/...` de
+   dentro do contêiner. Para abrir no navegador do notebook, crie na VM um
+   `~/compose/demo.override.yaml` que publique só no loopback do host
+   (`services.tools.ports: ["127.0.0.1:8000:8000", "127.0.0.1:5173:5173",
+   "127.0.0.1:8080:8080"]`), suba com `docker compose -f compose.yaml -f
+   demo.override.yaml --profile full up -d` e use `LocalForward` por SSH. É
+   um arquivo local da sessão, não vai para o repositório, e as portas
+   continuam só em `127.0.0.1`.
+7. Crie **dados de teste reconhecíveis**: linhas conhecidas no PostgreSQL
    (ex.: 100 linhas com um valor fixo), uma chave no Redis, um arquivo em
    `~/work`, e o login de `cdw-agent claude`/`codex` (para conferir o
    `~/.claude`/`~/.codex` no restore). Anote as contagens/hashes esperados.
@@ -66,10 +86,18 @@ O repositório só traz os serviços de infraestrutura (perfis `tools`, `db`,
    enquanto o backup estiver rodando).
 
 ## 4. Backup 💶 (R2)
-1. `make backup`. Anote o tempo e o tamanho do snapshot
-   (`restic snapshots`, `restic stats`).
-2. Confirme os dois snapshots: `cdw` (dados) e `cdw-state` (estado do
-   OpenTofu, ADR-0007).
+1. `make backup`. Anote o tempo que ele imprime.
+2. Inspecione o repositório **a partir do notebook**, com o restic local
+   (`sudo apt-get install restic`) e as credenciais do seu `.env` e do
+   arquivo de senha, nunca da VM (o backup apaga as dela ao terminar):
+   ```bash
+   set -a; source .env; set +a
+   export RESTIC_PASSWORD_FILE=~/.config/cdw/restic-password
+   restic snapshots
+   restic stats latest --tag cdw
+   ```
+   Confirme os dois snapshots, `cdw` (dados) e `cdw-state` (estado do
+   OpenTofu, ADR-0007), e anote o tamanho.
 3. Na VM, depois do backup: `ls -la ~/.cdw-backup.env` (não deve existir; as credenciais são
    apagadas ao fim).
 
@@ -77,7 +105,7 @@ O repositório só traz os serviços de infraestrutura (perfis `tools`, `db`,
 1. `make down`: confira que o backup roda e é verificado antes, que a lista
    de recursos e o custo residual aparecem, e digite `destruir <nome>`.
 2. `make audit` e o console da Hetzner: **nenhum** servidor, IPv4 primário,
-   volume ou snapshot restante. Firewall e chave SSH não são cobrados, mas
+   volume ou snapshot restante (o IPv4 só se confere no console). Firewall e chave SSH não são cobrados, mas
    também devem ter sido removidos.
 3. Teste do guardrail (opcional, em uma segunda rodada): com o `RESTIC_*`
    inválido, `make down` deve **recusar** destruir.
