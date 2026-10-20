@@ -1,19 +1,151 @@
 # Operação
 
-## Preparação (uma vez, no WSL2 Ubuntu)
-1. Instale OpenTofu na versão de `.opentofu-version`, além de `jq`, `curl`,
-   `make`, `git` e `openssh-client`.
-2. Crie um projeto dedicado no console da Hetzner e um token de API com
-   leitura e escrita **só nesse projeto**. Guarde-o no gerenciador de senhas.
-3. `cp .env.example .env && chmod 600 .env` e preencha `HCLOUD_TOKEN` editando
-   o arquivo (não use `export` na linha de comando, que fica no histórico).
-4. Crie a passphrase do estado (mínimo 16 caracteres) e guarde uma cópia no
-   gerenciador de senhas; sem ela o estado não pode ser lido:
-   ```bash
-   install -d -m 700 ~/.config/cdw
-   (umask 077; openssl rand -base64 32 > ~/.config/cdw/state-passphrase)
+## Preparação (uma vez)
+
+### Onde cada coisa roda
+Há três lugares diferentes. Quase tudo o que você digita neste guia roda no
+segundo.
+
+| Lugar | O que é | O que roda nele |
+|---|---|---|
+| **Windows** (seu notebook) | O sistema normal do seu computador | PowerShell (só para instalar o WSL2), VS Code com a extensão Remote - SSH |
+| **WSL2 Ubuntu** (dentro do seu notebook) | Um Linux que roda dentro do Windows, no seu próprio computador. Não é um servidor e não custa nada | Este repositório, o arquivo `.env`, o OpenTofu e **todos os comandos `make`** |
+| **Hetzner** (a nuvem) | O servidor pago, criado depois por `make up` | Nada que você instale à mão: o `make up` cria a VM e o bootstrap configura tudo. Você só entra nela com `make connect` ou pelo VS Code |
+
+Resumo: você instala as ferramentas **uma vez no WSL2 Ubuntu do seu
+notebook**. A Hetzner só recebe a VM que os scripts criam. Se você usa Linux
+nativo no lugar do Windows, pule o passo 1 e siga do passo 2 no seu terminal.
+
+### Passo 1: instalar o WSL2 com Ubuntu (Windows)
+Requer Windows 10 (21H2 ou mais novo) ou Windows 11, com virtualização ligada
+na BIOS/UEFI (na maioria dos notebooks já vem ligada).
+1. Abra o menu Iniciar, procure **PowerShell**, clique com o botão direito e
+   escolha **Executar como administrador**.
+2. Rode `wsl --list --online` para ver as distribuições e depois instale o
+   Ubuntu 24.04, que é o mesmo que a VM usa:
+   ```powershell
+   wsl --install -d Ubuntu-24.04
    ```
-5. `make init` deve terminar com "Preflight: tudo pronto."
+   Se o comando pedir, reinicie o computador e abra o Ubuntu de novo.
+3. Na primeira abertura o Ubuntu pede um **nome de usuário** e uma **senha**
+   (só para o Ubuntu local; não têm relação com a Hetzner). Anote a senha.
+4. Confirme que é WSL 2: `wsl -l -v` no PowerShell deve mostrar `VERSION 2`.
+5. Para abrir o Ubuntu depois: procure **Ubuntu** no menu Iniciar ou use o
+   Windows Terminal. A partir daqui, **todos os comandos são digitados nesse
+   terminal Ubuntu**, salvo aviso em contrário.
+
+### Passo 2: instalar os programas no Ubuntu
+```bash
+sudo apt-get update
+sudo apt-get install -y git make curl jq openssh-client openssl unzip restic
+```
+O `sudo` pede a senha do Ubuntu que você criou. O `restic` só é usado para
+recuperar o estado em outro computador (veja "Backup e restore"), mas é
+melhor já ter.
+
+### Passo 3: baixar este repositório
+Clone dentro da sua pasta pessoal do Ubuntu (`~`), **não** em `/mnt/c/...`:
+as permissões de arquivo (`chmod 600`) que os scripts exigem não funcionam nas
+pastas do Windows.
+```bash
+cd ~
+git clone https://github.com/TFLima/cloud-workstation.git
+cd cloud-workstation
+```
+Se o repositório for privado, o Git pede seu usuário do GitHub e, como senha,
+um token de acesso pessoal do GitHub (não a senha da conta).
+
+### Passo 4: instalar o OpenTofu
+O OpenTofu é a ferramenta que cria a VM. A versão exata está no arquivo
+`.opentofu-version`. Dentro da pasta do repositório:
+```bash
+V="$(cat .opentofu-version)"
+cd "$(mktemp -d)"
+curl -fsSLO "https://github.com/opentofu/opentofu/releases/download/v${V}/tofu_${V}_linux_amd64.zip"
+curl -fsSLO "https://github.com/opentofu/opentofu/releases/download/v${V}/tofu_${V}_SHA256SUMS"
+grep " tofu_${V}_linux_amd64.zip\$" "tofu_${V}_SHA256SUMS" | sha256sum -c -
+unzip -q "tofu_${V}_linux_amd64.zip" tofu
+sudo install -m 0755 tofu /usr/local/bin/tofu
+cd ~/cloud-workstation
+tofu version
+```
+A linha do `sha256sum` deve terminar com `OK`; se não, **pare** e não
+instale. O último comando deve mostrar `OpenTofu v` seguido da versão do
+arquivo. Este guia cobre computadores x86_64 (Intel/AMD), que são os
+suportados pelo lock do provider; em ARM não siga estes passos sem antes
+acrescentar `linux_arm64` ao lock.
+
+### Passo 5: criar a chave SSH
+É a chave com a qual você entra na VM. Se você já tem `~/.ssh/id_ed25519.pub`
+no Ubuntu, pule. Senão:
+```bash
+ssh-keygen -t ed25519 -C "cdw"
+```
+Aceite o caminho sugerido (Enter) e escolha uma senha para a chave (ou deixe
+vazia). Isso cria `~/.ssh/id_ed25519` (privada, **nunca** compartilhe) e
+`~/.ssh/id_ed25519.pub` (pública, é a que vai para a VM). Para usar o VS Code,
+a chave também precisa existir no Windows; veja "VS Code Remote - SSH" mais
+adiante.
+
+### Passo 6: criar o projeto e o token na Hetzner
+Isso é feito no navegador, no site da Hetzner; nada é instalado.
+1. Crie uma conta em <https://console.hetzner.com/>. Para criar projetos e
+   servidores a Hetzner exige uma conta completa, com dados pessoais e forma
+   de pagamento. Os custos estão em `docs/costs.md`; nada é cobrado até o
+   `make up`.
+2. No console, crie um **projeto novo e só para isto** (na tela inicial de
+   projetos, o botão de novo projeto; dê um nome como `cloud-dev-workstation`
+   e abra o projeto). Um projeto dedicado limita o estrago de um token
+   vazado. O texto exato dos botões pode mudar; a ideia é: um projeto vazio,
+   só seu.
+3. Dentro do projeto, abra **Security** no menu da esquerda, depois a aba
+   **API tokens** e **Generate API token**.
+4. Dê uma descrição (ex.: `cdw`), escolha a permissão **Read & Write** e gere.
+5. **Copie o token agora**: a Hetzner não o mostra de novo. Guarde-o no seu
+   gerenciador de senhas. Não o cole em chats nem em comandos do terminal.
+
+### Passo 7: preencher o `.env`
+No Ubuntu, na pasta do repositório:
+```bash
+cp .env.example .env
+chmod 600 .env
+nano .env
+```
+No editor, preencha só a linha `HCLOUD_TOKEN=` colando o token logo depois do
+`=`, sem aspas. Salve com `Ctrl+O`, `Enter` e saia com `Ctrl+X`. As outras
+linhas já têm valores padrão adequados (região `nbg1`, tipo `cx43`, chave
+`~/.ssh/id_ed25519.pub`). Não use `export HCLOUD_TOKEN=...` no terminal: o
+valor ficaria no histórico de comandos.
+
+### Passo 8: criar a passphrase do estado
+O OpenTofu guarda o que sabe sobre a VM num arquivo (o "estado"), criptografado
+com esta frase. Sem ela o estado não pode ser lido, então guarde uma cópia no
+gerenciador de senhas:
+```bash
+install -d -m 700 ~/.config/cdw
+(umask 077; openssl rand -base64 32 > ~/.config/cdw/state-passphrase)
+clip.exe < ~/.config/cdw/state-passphrase
+```
+O `clip.exe` copia a frase para a área de transferência do Windows **sem
+mostrá-la na tela**. Cole-a agora no gerenciador de senhas (por exemplo, numa
+nota "cdw estado") e, em seguida, copie qualquer outro texto para limpar a
+área de transferência. Nunca imprima essa frase com `cat` nem a cole em
+chats.
+
+### Passo 9: conferir tudo
+```bash
+make init
+```
+Deve terminar com **"Preflight: tudo pronto."** Se aparecer uma linha
+`[FALHA]`, ela diz o que falta (ferramenta não instalada, variável vazia,
+permissão do arquivo etc.); corrija e rode de novo. Avisos `[aviso]` não
+impedem nada.
+
+### O que ainda falta antes de destruir a VM
+O backup externo (Cloudflare R2) não é necessário para criar a VM, mas o
+`make down` faz backup antes de destruir e **recusa destruir se o backup
+falhar** (só dá para pular por sua conta e risco). Configure-o antes de começar a trabalhar,
+seguindo "Backup e restore" abaixo.
 
 ## Ciclo de uso
 | Passo | Comando | Observações |
