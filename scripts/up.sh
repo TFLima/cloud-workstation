@@ -21,6 +21,9 @@ fi
 
 existed="$(cat "$CDW_STATE_DIR/server-existed-before-plan" 2>/dev/null || echo 0)"
 
+# O plano salvo já tem as variáveis (tipo escolhido, CIDR, chave); o apply não
+# pode receber valores diferentes do ambiente.
+cdw_unset_tf_vars
 tf_run apply -input=false "$CDW_STATE_DIR/cdw.tfplan"
 rm -f "$CDW_STATE_DIR/cdw.tfplan"
 
