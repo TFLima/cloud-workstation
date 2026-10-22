@@ -67,6 +67,18 @@ HCL
 	export TF_ENCRYPTION
 }
 
+# Remove do ambiente toda variável TF_VAR_*. Um plano salvo já carrega os
+# valores das variáveis; se o ambiente trouxer qualquer valor para elas (mesmo
+# vazio, como "TF_VAR_admin_cidr=" no .env, ou o tipo de servidor do .env em
+# vez do escolhido no plano), o "apply" recusa com "Mismatch between input and
+# plan variable value". Use antes de aplicar um plano salvo.
+cdw_unset_tf_vars() {
+	local name
+	while IFS= read -r name; do
+		unset "$name"
+	done < <(compgen -e | grep '^TF_VAR_' || true)
+}
+
 tf_run() {
 	local tf
 	tf="$(tf_bin)" || die "nem tofu nem terraform encontrados"
