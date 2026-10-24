@@ -95,7 +95,7 @@ fi
 
 COMPOSE_DIR="$HOME/compose"
 running() {
-	[[ -d "$COMPOSE_DIR" ]] && (cd "$COMPOSE_DIR" && docker compose ps --status running --services 2>/dev/null) | grep -qx "$1"
+	[[ -d "$COMPOSE_DIR" ]] && (cd "$COMPOSE_DIR" && docker compose ps --status running --services 2>/dev/null </dev/null) | grep -qx "$1"
 }
 
 pg_dump_file=""
@@ -135,7 +135,7 @@ if [[ -n "$redis_dump_file" ]]; then
 		(cd "$COMPOSE_DIR" &&
 			docker compose stop redis &&
 			docker compose cp "$redis_dump_file" redis:/data/dump.rdb &&
-			docker compose start redis)
+			docker compose start redis) </dev/null
 	else
 		install -d -m 0700 "$PENDING_DIR"
 		cp -a "$redis_dump_file" "$PENDING_DIR/"

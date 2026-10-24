@@ -122,6 +122,38 @@ cdw_ssh() {
 	ssh "${opts[@]}" "$target" "$@"
 }
 
+# Roda na VM um script local: cdw_ssh_script <server_id> <usuario@ip> <script> [VAR=valor...]
+# O script é gravado num arquivo temporário da VM e executado com stdin em
+# /dev/null. Com "bash -s" o script chega pelo stdin do bash, e qualquer comando
+# que também lesse o stdin (docker compose exec, ssh, cat) engoliria o resto
+# dele; o bash sairia com 0 sem terminar o trabalho (foi o que fez o make backup
+# dizer "concluído" sem criar o snapshot).
+cdw_ssh_script() {
+	local server_id="$1" target="$2" script="$3"
+	shift 3
+	cdw_ssh "$server_id" "$target" "f=\$(mktemp) && cat >\"\$f\" && { $* bash \"\$f\" </dev/null; rc=\$?; rm -f \"\$f\"; exit \$rc; }" <"$script"
+}
+
+# Roda um comando que imprime na tela e exige que a saída contenha a linha final
+# esperada: <marcador> <comando...>. Protege contra um script remoto que saia com
+# 0 antes da hora; sem a linha final, nada de "concluído" (e o make down não
+# destrói uma VM cujo backup não aconteceu).
+cdw_remote_must_finish() {
+	local marker="$1" out rc=0
+	shift
+	out="$(mktemp)"
+	"$@" 2>&1 | tee "$out" || rc=$?
+	if ((rc != 0)); then
+		rm -f "$out"
+		return "$rc"
+	fi
+	if ! grep -qF -- "$marker" "$out"; then
+		rm -f "$out"
+		die "o script remoto terminou sem chegar ao fim (faltou a linha '$marker'); considere o resultado como NÃO concluído"
+	fi
+	rm -f "$out"
+}
+
 # Impressão digital estável da chave pública local (não sensível: é pública).
 cdw_local_key_fingerprint() {
 	cut -d' ' -f1-2 "$CDW_SSH_PUBLIC_KEY_FILE" | sha256sum | cut -d' ' -f1

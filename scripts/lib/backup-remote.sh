@@ -81,8 +81,11 @@ if [[ ! -d "$COMPOSE_DIR" ]]; then
 	echo "[backup] nada implantado em $COMPOSE_DIR; pulando dumps dos bancos"
 fi
 
+# Todo comando que lê stdin (docker compose exec/cp, redis-cli) leva "</dev/null":
+# este script chega pelo stdin do "bash -s", e um comando que o lesse engoliria o
+# resto do script, que terminaria com sucesso sem fazer o backup.
 running() {
-	[[ -d "$COMPOSE_DIR" ]] && (cd "$COMPOSE_DIR" && docker compose ps --status running --services 2>/dev/null) | grep -qx "$1"
+	[[ -d "$COMPOSE_DIR" ]] && (cd "$COMPOSE_DIR" && docker compose ps --status running --services 2>/dev/null </dev/null) | grep -qx "$1"
 }
 
 mkdir -p "$STAGE/dumps"
@@ -91,7 +94,7 @@ dumps=()
 if running postgres; then
 	echo "[backup] dump lógico do PostgreSQL (pg_dump -Fc)"
 	f="$STAGE/dumps/postgres-$(date -u +%Y%m%dT%H%M%SZ).dump"
-	(cd "$COMPOSE_DIR" && docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"') >"$f"
+	(cd "$COMPOSE_DIR" && docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' </dev/null) >"$f"
 	dumps+=("$(basename "$f")")
 else
 	echo "[backup] serviço postgres não está no ar; pulando dump"
@@ -99,9 +102,9 @@ fi
 
 if running redis; then
 	echo "[backup] snapshot do Redis (SAVE síncrono + cópia do dump.rdb)"
-	(cd "$COMPOSE_DIR" && docker compose exec -T redis redis-cli SAVE) >/dev/null
+	(cd "$COMPOSE_DIR" && docker compose exec -T redis redis-cli SAVE </dev/null) >/dev/null
 	f="$STAGE/dumps/redis-$(date -u +%Y%m%dT%H%M%SZ).rdb"
-	(cd "$COMPOSE_DIR" && docker compose cp redis:/data/dump.rdb "$f")
+	(cd "$COMPOSE_DIR" && docker compose cp redis:/data/dump.rdb "$f" </dev/null)
 	dumps+=("$(basename "$f")")
 else
 	echo "[backup] serviço redis não está no ar; pulando snapshot"

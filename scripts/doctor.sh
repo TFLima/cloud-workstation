@@ -25,4 +25,4 @@ else
 fi
 
 echo "VM:"
-cdw_ssh "$server_id" "$user@$ip" 'bash -s' <"$CDW_ROOT/scripts/lib/doctor-remote.sh"
+cdw_ssh_script "$server_id" "$user@$ip" "$CDW_ROOT/scripts/lib/doctor-remote.sh"
