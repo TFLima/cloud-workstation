@@ -63,11 +63,11 @@ log "enviando credenciais do restic por stdin (nunca gravadas localmente nem imp
 
 if [[ "$mode" == "state" ]]; then
 	log "copiando o estado OpenTofu para o repositório restic"
-	cdw_ssh "$server_id" "$user@$ip" "bash -s" <"$CDW_ROOT/scripts/lib/backup-remote.sh"
+	cdw_remote_must_finish "[backup] concluído" cdw_ssh_script "$server_id" "$user@$ip" "$CDW_ROOT/scripts/lib/backup-remote.sh"
 	log "cópia do estado concluída"
 	exit 0
 fi
 
 log "rodando backup na VM (dumps, restic backup, forget --prune, check)"
-cdw_ssh "$server_id" "$user@$ip" "bash -s" <"$CDW_ROOT/scripts/lib/backup-remote.sh"
+cdw_remote_must_finish "[backup] concluído" cdw_ssh_script "$server_id" "$user@$ip" "$CDW_ROOT/scripts/lib/backup-remote.sh"
 log "backup concluído"

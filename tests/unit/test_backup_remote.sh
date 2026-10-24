@@ -112,4 +112,39 @@ assert_not_contains "$log" "--tag cdw " "não cria snapshot cdw (seria o latest 
 assert_not_contains "$log" "restic forget" "não aplica retenção"
 if [[ -e "$TMP/home/.cdw-state-upload" ]]; then flunk "cópia do estado ficou na VM"; else pass "cópia do estado apagada ao sair"; fi
 
+echo "script lido do stdin (ssh ... bash -s) com bancos no ar:"
+
+# Reprodução do bug real: pelo ssh o script chega pelo stdin do bash, e o
+# "docker compose exec -T" lê o stdin (para repassá-lo ao contêiner). Sem
+# "</dev/null", ele engolia o resto do script, o bash saía com 0 e o backup
+# parecia concluído sem nunca chamar o restic.
+cat >"$TMP/bin/docker" <<'STUB'
+#!/usr/bin/env bash
+echo "docker $*" >>"$CDW_TEST_LOG"
+case "$*" in
+"--version") echo "Docker version 29.9.1" ;;
+"compose ps"*) printf 'postgres\nredis\n' ;;
+"compose exec"*)
+	cat >/dev/null
+	echo dados-do-banco
+	;;
+"compose cp"*) : >"${@: -1}" ;;
+esac
+exit 0
+STUB
+mkdir -p "$TMP/home/compose"
+write_env full
+status=0
+out="$(
+	HOME="$TMP/home" PATH="$TMP/bin:$PATH" CDW_TEST_LOG="$TMP/log" CDW_TEST_MANIFEST="$TMP/manifest.json" \
+		CDW_AGENT_HOME="$TMP/agent" CDW_TEST_AGENT_COPY="$TMP/agent-copy" \
+		bash -s <"$ROOT/scripts/lib/backup-remote.sh" 2>&1
+)" || status=$?
+assert_status 0 "$status" "termina com sucesso"
+assert_contains "$out" "concluído: snapshot" "chega ao fim do script (o stdin não foi engolido)"
+log="$(cat "$TMP/log")"
+assert_contains "$log" "restic backup $TMP/home/work" "o snapshot é realmente feito"
+assert_contains "$log" "restic forget" "aplica a retenção depois do snapshot"
+assert_contains "$(jq -c .dumps "$TMP/manifest.json")" "postgres-" "o dump do PostgreSQL entra no manifesto"
+
 finish
