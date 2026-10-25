@@ -37,10 +37,7 @@ cdw_ssh "$server_id" "$user@$ip" true 2>/dev/null || die "SSH não respondeu em 
 
 echo "ATENÇÃO: isso sobrescreve ~/work, dotfiles dos agentes e os bancos de dados"
 echo "na VM atual ($ip) com o snapshot '$snapshot' do repositório restic."
-if [[ "${CDW_CONFIRM:-}" != "restaurar" ]]; then
-	read -r -p "Digite 'restaurar' para continuar: " answer
-	[[ "$answer" == "restaurar" ]] || die "cancelado; nada foi restaurado"
-fi
+cdw_confirm_phrase "restaurar" "cancelado; nada foi restaurado"
 
 log "enviando credenciais do restic por stdin (nunca gravadas localmente nem impressas)"
 {

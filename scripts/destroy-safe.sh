@@ -61,10 +61,7 @@ else
 fi
 
 expected="destruir $name"
-if [[ "${CDW_CONFIRM:-}" != "$expected" ]]; then
-	read -r -p "Digite '$expected' para continuar: " answer
-	[[ "$answer" == "$expected" ]] || die "cancelado; nada foi destruído (o backup acima, se foi feito, continua válido)"
-fi
+cdw_confirm_phrase "$expected" "cancelado; nada foi destruído (o backup acima, se foi feito, continua válido)"
 
 tf_run destroy -input=false -auto-approve
 rm -f "$CDW_STATE_DIR/known_hosts.$server_id"

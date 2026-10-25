@@ -13,6 +13,20 @@ die() {
 	exit 1
 }
 
+# Pede a frase de confirmação até ela ser digitada exatamente. Errar não
+# encerra: pergunta de novo. Só Ctrl+C (ou o fim da entrada, para não ficar
+# em laço num terminal sem entrada) cancela. CDW_CONFIRM com a frase certa
+# dispensa a pergunta (automação).
+cdw_confirm_phrase() { # <frase esperada> <mensagem de cancelamento>
+	local expected="$1" cancel_msg="$2" answer
+	[[ "${CDW_CONFIRM:-}" == "$expected" ]] && return 0
+	while true; do
+		read -r -p "Digite '$expected' para continuar (Ctrl+C cancela): " answer || die "$cancel_msg (entrada encerrada sem a confirmação)"
+		[[ "$answer" == "$expected" ]] && return 0
+		warn "frase incorreta; digite exatamente '$expected' ou pressione Ctrl+C para cancelar."
+	done
+}
+
 # Interrompe com código 2 para etapas ainda não implementadas.
 not_implemented() {
 	printf '[cdw] %s ainda não foi implementado (previsto na %s).\n' "$1" "$2" >&2
