@@ -68,4 +68,10 @@ else
 	flunk "$lock ausente ou divergente de versions.tf ($pinned)"
 fi
 
+# Num checkout feito pelo Git do Windows (ex.: /mnt/c/...), CRLF quebra os
+# scripts ("set: pipefail: invalid option name"); .gitattributes força LF.
+if grep -qE '^\* .*eol=lf' .gitattributes 2>/dev/null; then pass ".gitattributes força LF"; else flunk ".gitattributes sem '* text=auto eol=lf'"; fi
+crlf="$(git ls-files --eol 2>/dev/null | grep -E 'i/(crlf|mixed)' || true)"
+if [[ -z "$crlf" ]]; then pass "nenhum arquivo versionado com CRLF"; else flunk "arquivos com CRLF: $crlf"; fi
+
 finish

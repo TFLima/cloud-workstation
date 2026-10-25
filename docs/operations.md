@@ -46,7 +46,10 @@ melhor já ter.
 ### Passo 3: baixar este repositório
 Clone dentro da sua pasta pessoal do Ubuntu (`~`), **não** em `/mnt/c/...`:
 as permissões de arquivo (`chmod 600`) que os scripts exigem não funcionam nas
-pastas do Windows.
+pastas do Windows, e um clone feito pelo Git do Windows traz quebras de linha
+CRLF (o erro típico é `set: pipefail: invalid option name`). Se isso já
+aconteceu, na pasta do projeto: `git config core.autocrlf false && git rm -r -q
+--cached . && git reset -q --hard` (apaga mudanças suas em arquivos versionados).
 ```bash
 cd ~
 git clone https://github.com/TFLima/cloud-workstation.git
