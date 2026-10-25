@@ -23,10 +23,7 @@ tf_run state list | sed 's/^/  - /'
 echo
 echo "ATENÇÃO: não há backup automático nesta fase. Tudo o que estiver na VM será perdido."
 expected="destruir $name"
-if [[ "${CDW_CONFIRM:-}" != "$expected" ]]; then
-	read -r -p "Digite '$expected' para continuar: " answer
-	[[ "$answer" == "$expected" ]] || die "cancelado; nada foi destruído"
-fi
+cdw_confirm_phrase "$expected" "cancelado; nada foi destruído"
 
 tf_run destroy -input=false -auto-approve
 rm -f "$CDW_STATE_DIR/known_hosts.$server_id"

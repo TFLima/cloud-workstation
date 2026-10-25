@@ -14,10 +14,7 @@ cdw_setup_encryption
 
 echo
 echo "ATENÇÃO: aplicar este plano cria recursos COBRADOS na Hetzner."
-if [[ "${CDW_CONFIRM:-}" != "criar" ]]; then
-	read -r -p "Digite 'criar' para continuar: " answer
-	[[ "$answer" == "criar" ]] || die "cancelado; nada foi criado"
-fi
+cdw_confirm_phrase "criar" "cancelado; nada foi criado"
 
 existed="$(cat "$CDW_STATE_DIR/server-existed-before-plan" 2>/dev/null || echo 0)"
 
