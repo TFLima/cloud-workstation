@@ -28,6 +28,28 @@ export RESTIC_REPOSITORY RESTIC_PASSWORD
 : "${RESTIC_PASSWORD:?RESTIC_PASSWORD ausente}"
 
 snapshot="${CDW_RESTORE_SNAPSHOT:-latest}"
+
+# make up restaura sozinho só se já houver dados salvos: num repositório novo
+# (primeiro make up, ou só com a cópia do estado, tag cdw-state) não há o que
+# restaurar e isso não é erro. Qualquer outra falha (credenciais, rede) é.
+if [[ "${CDW_RESTORE_IF_PRESENT:-0}" == "1" ]]; then
+	if snaps="$(restic snapshots --tag cdw --host "$(hostname)" --json 2>"$STAGE/snapshots.err")"; then
+		count="$(jq 'length' <<<"$snaps")"
+	else
+		if grep -qiE 'does not exist|no such file or directory' "$STAGE/snapshots.err"; then
+			count=0
+		else
+			cat "$STAGE/snapshots.err" >&2
+			echo "[restore] não foi possível consultar o repositório restic" >&2
+			exit 1
+		fi
+	fi
+	if [[ "$count" == "0" ]]; then
+		echo "[restore] concluído: nenhum snapshot de dados (tag cdw) no repositório; nada a restaurar"
+		exit 0
+	fi
+fi
+
 echo "[restore] restaurando snapshot '$snapshot' (tag cdw, host $(hostname)) para a área de preparo"
 restic restore "$snapshot" --target "$STAGE" --tag cdw --host "$(hostname)"
 

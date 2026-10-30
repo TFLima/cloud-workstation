@@ -63,3 +63,17 @@ if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
 else
 	warn "RESTIC_REPOSITORY não definido: o estado OpenTofu existe só em $CDW_STATE_DIR, sem cópia externa"
 fi
+
+# VM nova + backup existente: sobe os serviços e restaura tudo de uma vez, sem
+# os passos separados make deploy / make restore. Só numa VM recém-criada (numa
+# que já existia, restaurar sobrescreveria dados vivos). A confirmação "criar"
+# acima já cobre isto: a VM está vazia. CDW_AUTO_RESTORE=0 desliga.
+if [[ "$existed" != "1" && "${CDW_AUTO_RESTORE:-1}" == "1" && -n "${RESTIC_REPOSITORY:-}" ]]; then
+	log "procurando um backup para restaurar (CDW_AUTO_RESTORE=0 desliga)"
+	if bash "$CDW_ROOT/scripts/deploy.sh"; then
+		CDW_CONFIRM=restaurar CDW_RESTORE_IF_PRESENT=1 bash "$CDW_ROOT/scripts/restore.sh" ||
+			die "a VM foi criada, mas a restauração automática falhou. Corrija o problema e rode make restore (a VM continua sendo cobrada)"
+	else
+		warn "make deploy falhou; a restauração automática foi PULADA. Corrija o .env (veja o erro acima) e rode make deploy e make restore"
+	fi
+fi
