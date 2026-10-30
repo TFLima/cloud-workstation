@@ -112,8 +112,11 @@ rodam **dentro dele**.
 
 ## 6. Recriar e restaurar 💶
 1. `make up` de novo. Anote o tempo de bootstrap.
-2. `make deploy` (mesmos perfis) e depois `make restore` (digite
-   `restaurar`). Anote o tempo.
+2. O próprio `make up` já sobe os serviços (`make deploy`) e restaura o backup
+   (`make restore`) numa VM nova; confira nas últimas linhas da saída
+   `[restore] concluído`. Se o `.env` estiver incompleto ele avisa e pula;
+   nesse caso rode `make deploy` e `make restore` (digite `restaurar`). Anote
+   o tempo.
 3. Verificação, comparando com as anotações do passo 2.6:
    - [ ] contagem/valores do PostgreSQL iguais;
    - [ ] chave do Redis presente;

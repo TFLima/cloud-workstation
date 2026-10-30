@@ -28,6 +28,21 @@ echo '{"bootstrap_version":"version=4","dumps":[]}' >"$snap_home/.cdw-backup-sta
 
 cat >"$TMP/bin/restic" <<'STUB'
 #!/usr/bin/env bash
+if [[ "$1" == "snapshots" ]]; then
+	case "${CDW_TEST_SNAPSHOTS:-present}" in
+	empty) echo '[]' ;;
+	missing)
+		echo "Fatal: unable to open config file: Stat: The specified key does not exist." >&2
+		exit 1
+		;;
+	denied)
+		echo "Fatal: unable to open config file: Stat: 400 Bad Request" >&2
+		exit 1
+		;;
+	*) echo '[{"short_id":"abc123"}]' ;;
+	esac
+	exit 0
+fi
 if [[ "$1" == "restore" ]]; then
 	while (($#)); do
 		[[ "$1" == "--target" ]] && target="$2"
@@ -68,6 +83,37 @@ if [[ -f "$HOME_DIR/work/projeto/app.txt" ]]; then pass "o work volta para o hom
 assert_status "2775" "$(stat -c '%a' "$HOME_DIR/work")" "a pasta work volta com setgid e escrita para o grupo"
 assert_status "2775" "$(stat -c '%a' "$HOME_DIR/work/projeto")" "subdiretório volta com setgid e escrita para o grupo"
 assert_status "664" "$(stat -c '%a' "$HOME_DIR/work/projeto/app.txt")" "arquivo volta gravável pelo grupo"
+if [[ -e "$HOME_DIR/.cdw-backup.env" ]]; then flunk "credenciais ficaram na VM"; else pass "credenciais apagadas ao sair"; fi
+
+echo "restauração automática do make up (CDW_RESTORE_IF_PRESENT=1):"
+
+run_if_present() { # <situação do repositório>
+	printf 'RESTIC_REPOSITORY=/tmp/repo-falso\nRESTIC_PASSWORD=teste\n' >"$HOME_DIR/.cdw-backup.env"
+	: >"$TMP/log"
+	rm -rf "$HOME_DIR/work" "$TMP/agent/.claude"
+	status=0
+	output="$(HOME="$HOME_DIR" PATH="$TMP/bin:$PATH" CDW_TEST_SNAPSHOT="$TMP/snapshot" CDW_TEST_LOG="$TMP/log" CDW_TEST_SNAPSHOTS="$1" \
+		CDW_RESTORE_IF_PRESENT=1 CDW_AGENT_USER=agent CDW_AGENT_HOME="$TMP/agent" CDW_WORK_GROUP="$(id -gn)" \
+		bash "$ROOT/scripts/lib/restore-remote.sh" 2>&1)" || status=$?
+}
+
+run_if_present empty
+assert_status 0 "$status" "repositório sem snapshot cdw: termina com sucesso"
+assert_contains "$output" "[restore] concluído" "imprime a linha final que o make exige"
+assert_contains "$output" "nada a restaurar" "avisa que não há o que restaurar"
+if [[ -e "$HOME_DIR/work" ]]; then flunk "restaurou sem snapshot"; else pass "não restaura nada"; fi
+
+run_if_present missing
+assert_status 0 "$status" "repositório ainda não criado: não é erro"
+assert_contains "$output" "nada a restaurar" "trata repositório inexistente como vazio"
+
+run_if_present denied
+assert_status 1 "$status" "credenciais recusadas: falha (não finge que não há backup)"
+assert_not_contains "$output" "nada a restaurar" "não diz que não há backup"
+
+run_if_present present
+assert_status 0 "$status" "com snapshot cdw: restaura"
+if [[ -f "$HOME_DIR/work/projeto/app.txt" ]]; then pass "o work foi restaurado"; else flunk "o work não foi restaurado"; fi
 if [[ -e "$HOME_DIR/.cdw-backup.env" ]]; then flunk "credenciais ficaram na VM"; else pass "credenciais apagadas ao sair"; fi
 
 finish

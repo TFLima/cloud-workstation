@@ -49,5 +49,5 @@ log "enviando credenciais do restic por stdin (nunca gravadas localmente nem imp
 } | cdw_ssh "$server_id" "$user@$ip" "umask 077 && cat > ~/.cdw-backup.env"
 
 log "restaurando na VM (pode levar alguns minutos)"
-cdw_remote_must_finish "[restore] concluído" cdw_ssh_script "$server_id" "$user@$ip" "$CDW_ROOT/scripts/lib/restore-remote.sh" "CDW_RESTORE_SNAPSHOT=$snapshot"
+cdw_remote_must_finish "[restore] concluído" cdw_ssh_script "$server_id" "$user@$ip" "$CDW_ROOT/scripts/lib/restore-remote.sh" "CDW_RESTORE_SNAPSHOT=$snapshot" "CDW_RESTORE_IF_PRESENT=${CDW_RESTORE_IF_PRESENT:-0}"
 log "restore concluído"

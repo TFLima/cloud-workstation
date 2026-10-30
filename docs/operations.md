@@ -154,14 +154,14 @@ seguindo "Backup e restore" abaixo.
 | Passo | Comando | Observações |
 |---|---|---|
 | Ver o que será criado | `make plan` | Consulta disponibilidade e preço; não cria nada. |
-| Criar a VM | `make up` | Pede que você digite `criar`. Espera o bootstrap terminar. |
+| Criar a VM | `make up` | Pede que você digite `criar`. Espera o bootstrap terminar e, se já existir um backup, sobe os serviços e o restaura (ver "Backup e restore"). |
 | Ver estado | `make status` | IP, estado na Hetzner, versão do bootstrap, disco e memória. |
 | Entrar | `make connect` | SSH com `known_hosts` próprio da VM. |
 | VS Code | `make connect-print` | Copie o bloco `Host cdw` para `C:\Users\<você>\.ssh\config`. |
 | Diagnóstico | `make doctor` | Falha se houver porta exposta, SSH com senha, disco cheio etc. |
 | Subir ferramentas/serviços | `make deploy` | Perfis em `CDW_COMPOSE_PROFILES` (padrão `tools`); ver abaixo. |
 | Backup | `make backup` | Dumps + snapshot restic criptografado fora da Hetzner; ver "Backup e restore" abaixo. |
-| Restore | `make restore` | Restaura o snapshot restic na VM atual; pede confirmação. |
+| Restore | `make restore` | Restaura o snapshot restic na VM atual; pede confirmação. O `make up` já faz isso sozinho numa VM nova. |
 | Destruir com segurança | `make down` | Backup + auditoria + confirmação + destruição; ver "Destruição" abaixo. |
 | Auditoria | `make audit` | Lista recursos na Hetzner com o rótulo do projeto; não destrói nada. |
 
@@ -247,6 +247,16 @@ seguindo "Backup e restore" abaixo.
   Um dump de banco que não pôde ser aplicado (serviço fora do ar) fica em
   `~/restore-pending/` na VM para aplicação manual.
 
+- **Restore automático no `make up`**: numa VM **recém-criada**, se o
+  repositório restic já tiver um snapshot de dados (tag `cdw`), o `make up`
+  roda `make deploy` e `make restore` por você, sem pedir outra confirmação
+  (a VM está vazia e você já digitou `criar`). Sem backup (primeira vez), ele
+  só avisa e segue. Se o `make deploy` falhar (por exemplo, falta
+  `CDW_TOOLS_IMAGE` no `.env`), a restauração é pulada com um aviso: corrija
+  e rode `make deploy` e `make restore`. Se a restauração falhar, o `make up`
+  termina com erro, mas a VM já existe e continua cobrando. Numa VM que já
+  existia, o `make up` nunca restaura. `CDW_AUTO_RESTORE=0` no `.env` desliga
+  tudo isso.
 - **Cópia externa do estado (ADR-0007)**: ao fim do `make up` e em todo
   `make backup`, o estado OpenTofu (já criptografado) vai para o mesmo
   repositório restic, num snapshot com a tag `cdw-state`. Uma sessão sem
