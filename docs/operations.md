@@ -178,10 +178,13 @@ seguindo "Backup e restore" abaixo.
 - **Claude Code e Codex** são instalados no host pelo bootstrap (não na
   imagem), num usuário próprio, `agent`, sem `sudo` e sem Docker (ADR-0008).
   Eles não leem o seu home, nem as credenciais do backup. Depois de
-  `make connect`, abra-os com `cdw-agent` no diretório do projeto:
-  `cdw-agent claude` (ou `cdw-agent codex`, ou `cdw-agent bash` para um shell
-  do agente) e autentique na primeira vez; nada disso é persistido em imagem,
-  Git ou log. Digitar só `claude` não funciona de propósito.
+  `make connect`, entre no diretório do projeto e digite `claude` (ou
+  `codex`) e autentique na primeira vez; nada disso é persistido em imagem,
+  Git ou log. Esses comandos são atalhos para `cdw-agent claude` e
+  `cdw-agent codex`: o agente roda como o usuário `agent`, nunca com os seus
+  privilégios. `cdw-agent bash` abre um shell como o agente. Em VMs criadas
+  antes do bootstrap versão 6, o atalho `claude` não existe e é preciso usar
+  `cdw-agent claude`.
 - **Arquivos em `~/work`** são compartilhados entre você e o agente (grupo
   `work`): os dois criam e editam. Revise o que o agente deixou (scripts,
   hooks do Git, tarefas do VS Code) antes de executar. Para o agente fazer
