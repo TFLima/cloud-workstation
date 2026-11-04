@@ -266,14 +266,10 @@ step_agents() {
 
 	# O codex é um script "#!/usr/bin/env node": sem "node" no PATH ele falha
 	# com "node: No such file or directory". O node fica em /usr/local/bin; os
-	# agentes em si não: quem os chama é o cdw-agent, que acerta o PATH. Sem
-	# symlinks de claude/codex em /usr/local/bin, digitar "claude" como
-	# operador falha em vez de rodar com os privilégios dele.
+	# agentes em si não: quem os chama é o cdw-agent, que acerta o PATH. Os
+	# binários reais ficam fora do PATH do operador; "claude" e "codex" em
+	# /usr/local/bin são atalhos para o cdw-agent (ver step_agents_launcher).
 	ln -sf "$AGENTS_NODE_DIR/bin/node" /usr/local/bin/node
-	local bin
-	for bin in claude codex; do
-		if [[ -L "/usr/local/bin/$bin" ]]; then rm -f "/usr/local/bin/$bin"; fi
-	done
 	printf '%s\n' "$want" >"$marker"
 	chown "$CDW_AGENT_USER:$CDW_AGENT_USER" "$marker"
 	log "agentes instalados; login (cdw-agent claude / cdw-agent codex) é feito pelo operador via SSH, nunca embutido aqui"
@@ -306,6 +302,18 @@ LAUNCHER
 	launcher="${launcher//@AGENT_BIN@/$npm_prefix/bin}"
 	launcher="${launcher//@NODE_BIN@/$AGENTS_NODE_DIR/bin}"
 	write_if_changed /usr/local/bin/cdw-agent "$launcher" 0755 || true
+
+	# Digitar só "claude" ou "codex" como operador roda o agente pelo cdw-agent,
+	# isto é, COMO o usuário dos agentes (nunca com os privilégios do operador).
+	# O binário real fica no home dos agentes, fora do PATH do operador, então não
+	# há recursão: o cdw-agent coloca o diretório dos agentes na frente do PATH.
+	local bin shortcut
+	for bin in claude codex; do
+		shortcut="#!/usr/bin/env bash
+# Atalho para: cdw-agent $bin (ADR-0008). Roda $bin como o usuário dos agentes.
+exec /usr/local/bin/cdw-agent $bin \"\$@\""
+		write_if_changed "/usr/local/bin/$bin" "$shortcut" 0755 || true
+	done
 }
 
 step_ssh() {

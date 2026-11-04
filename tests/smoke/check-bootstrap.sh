@@ -97,10 +97,20 @@ op_env=(env -i "PATH=/usr/local/bin:/usr/bin:/bin" "HOME=$home")
 assert_status "$agent" "$(sudo -u "$user" "${op_env[@]}" sh -c 'cd ~/work && cdw-agent id -un' 2>/dev/null || true)" "cdw-agent roda o comando como $agent"
 assert_status "$home/work" "$(sudo -u "$user" "${op_env[@]}" sh -c 'cd ~/work && cdw-agent pwd' 2>/dev/null || true)" "cdw-agent mantém o diretório atual"
 for bin in claude codex; do
-	if sudo -u "$user" "${op_env[@]}" sh -c "command -v $bin" >/dev/null 2>&1; then
-		flunk "$bin resolve direto para $user (deveria exigir cdw-agent)"
+	# "claude"/"codex" digitados pelo operador são atalhos para o cdw-agent: o
+	# agente roda como $agent, nunca com os privilégios do operador.
+	resolved="$(sudo -u "$user" "${op_env[@]}" sh -c "command -v $bin" 2>/dev/null || true)"
+	assert_status "/usr/local/bin/$bin" "$resolved" "$bin resolve para o atalho do cdw-agent"
+	if grep -q "^exec /usr/local/bin/cdw-agent $bin " "/usr/local/bin/$bin"; then
+		pass "$bin chama o cdw-agent (roda como $agent)"
 	else
-		pass "$bin não resolve direto para $user"
+		flunk "/usr/local/bin/$bin não chama o cdw-agent"
+	fi
+	output="$(sudo -u "$user" "${op_env[@]}" sh -c "cd ~/work && $bin --version" 2>&1 || true)"
+	if [[ "$output" != *"No such file or directory"* && -n "$output" ]]; then
+		pass "$bin --version roda direto num shell não interativo (saída: $output)"
+	else
+		flunk "$bin --version falhou num shell não interativo: ${output:-<vazio>}"
 	fi
 	output="$(sudo -u "$user" "${op_env[@]}" sh -c "cd ~/work && cdw-agent $bin --version" 2>&1 || true)"
 	if [[ "$output" != *"No such file or directory"* && -n "$output" ]]; then

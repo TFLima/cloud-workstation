@@ -37,8 +37,11 @@ isso que eles existem.
 - Os agentes são instalados e executados como `agent`. O comando
   `cdw-agent claude` (ou `codex`, ou `bash`) roda o comando como `agent` no
   diretório atual, com o PATH dos agentes; o operador continua entrando como
-  `dev` pelo VS Code. Não há mais `claude`/`codex` em `/usr/local/bin`:
-  digitar `claude` como operador falha em vez de rodar com os privilégios dele.
+  `dev` pelo VS Code. Os binários reais ficam no home de `agent`, fora do PATH
+  do operador. Desde o bootstrap 6, `claude` e `codex` em `/usr/local/bin` são
+  atalhos que chamam o `cdw-agent` (`exec cdw-agent claude "$@"`): digitar
+  `claude` como operador roda o agente como `agent`, nunca com os privilégios do
+  operador. (Entre os bootstraps 5 e 6, digitar `claude` falhava de propósito.)
 - O home de `agent` é `0700`. Os logins (`~/.claude`, `~/.codex`) ficam lá.
   O backup e o restore rodam como `dev` e usam `sudo` para ler e gravar esses
   dois diretórios: o backup copia para a área de preparo (removida ao sair) e o
@@ -75,7 +78,8 @@ agentes das credenciais do backup e mantém o que eles precisam: o código em
 acima.
 
 ## Consequências
-- `docs/operations.md` passa a mostrar `cdw-agent claude` em vez de `claude`.
+- `docs/operations.md` mostrava `cdw-agent claude` em vez de `claude`; desde o
+  bootstrap 6 volta a mostrar `claude`, que é um atalho para o `cdw-agent`.
 - O backup e o restore passam a ler e gravar os dotfiles em `/home/agent`.
 - O smoke do CI confirma que `agent` não tem sudo, não está em `docker` e
   não lê `/home/dev`.
