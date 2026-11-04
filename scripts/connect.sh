@@ -34,7 +34,7 @@ Bloco para ~/.ssh/config (no Windows: C:\\Users\\<você>\\.ssh\\config) usado pe
     # LocalForward 6379 127.0.0.1:6379
 
 No VS Code: F1 > "Remote-SSH: Connect to Host..." > cdw.
-O IP muda a cada make up; atualize HostName após recriar a VM.
+O IP muda a cada make up; no PowerShell, "cdw-push -ConfigOnly" atualiza HostName sozinho.
 TXT
 	exit 0
 fi

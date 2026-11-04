@@ -95,3 +95,19 @@ tf_bin() {
 		return 1
 	fi
 }
+
+# Valida a subpasta de destino dentro de ~/work (make push / cdw-push.ps1):
+# relativa, sem "..", sem espaços e só com caracteres seguros, porque ela
+# entra num comando remoto (mkdir) e no caminho do scp.
+cdw_valid_work_subdir() {
+	local d="$1" part
+	local -a parts
+	[[ -z "$d" ]] && return 0
+	[[ "$d" =~ ^[A-Za-z0-9._/-]+$ ]] || return 1
+	[[ "$d" == /* || "$d" == -* ]] && return 1
+	IFS='/' read -r -a parts <<<"$d"
+	for part in "${parts[@]}"; do
+		[[ "$part" == ".." ]] && return 1
+	done
+	return 0
+}

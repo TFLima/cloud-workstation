@@ -157,7 +157,8 @@ seguindo "Backup e restore" abaixo.
 | Criar a VM | `make up` | Pede que você digite `criar`. Espera o bootstrap terminar e, se já existir um backup, sobe os serviços e o restaura (ver "Backup e restore"). |
 | Ver estado | `make status` | IP, estado na Hetzner, versão do bootstrap, disco e memória. |
 | Entrar | `make connect` | SSH com `known_hosts` próprio da VM. |
-| VS Code | `make connect-print` | Copie o bloco `Host cdw` para `C:\Users\<você>\.ssh\config`. |
+| VS Code | `make connect-print` | Copie o bloco `Host cdw` para `C:\Users\<você>\.ssh\config`, ou rode `cdw-push -ConfigOnly` no PowerShell para atualizá-lo sozinho. |
+| Copiar arquivos | `make push ORIGEM=... DESTINO=...` | Para `~/work` na VM pelo IP atual; no PowerShell, `cdw-push` (ver README). |
 | Diagnóstico | `make doctor` | Falha se houver porta exposta, SSH com senha, disco cheio etc. |
 | Subir ferramentas/serviços | `make deploy` | Perfis em `CDW_COMPOSE_PROFILES` (padrão `tools`); ver abaixo. |
 | Backup | `make backup` | Dumps + snapshot restic criptografado fora da Hetzner; ver "Backup e restore" abaixo. |

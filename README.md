@@ -35,11 +35,46 @@ make init                                # valida tudo sem imprimir segredos
 | `make plan` | Escolhe o tipo disponível, mostra custo estimado e o plano (não cria nada) | 2 ✅ |
 | `make up` | Cria VM, firewall e chave SSH após você digitar `criar` (PAGO) | 2 ✅ |
 | `make status` / `connect` / `connect-print` | Estado da VM, SSH e bloco para o VS Code | 2 ✅ |
+| `make push ORIGEM=... [DESTINO=...]` | Copia arquivos/pastas do WSL para `~/work` na VM, seja qual for o IP | 5 ✅ |
 | `make deploy` | Stacks Docker por perfil (`tools`/`db`/`cache`/`full`) na VM | 3 ✅ |
 | `make backup` / `restore` | Backup restic criptografado (fora da Hetzner) e restauração | 4 ✅ |
 | `make down` | Backup verificado + auditoria de custo + confirmação + destruição | 5 ✅ |
 | `make audit` | Lista recursos na Hetzner com o rótulo do projeto (achar órfãos) | 5 ✅ |
 | `make doctor` | Diagnóstico de SSH, Docker, disco, memória, rede e portas | 2 ✅ |
+
+## Copiar arquivos para a VM (o IP muda a cada `make up`)
+O IP atual é lido do estado OpenTofu, então você não precisa saber qual é.
+
+**No PowerShell do Windows** (`scripts/cdw-push.ps1`). Uma vez só, crie um
+atalho `cdw-push` no seu perfil:
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # se o PowerShell bloquear scripts
+Unblock-File C:\Projetos\cloud-workstation\scripts\cdw-push.ps1   # se veio de um .zip
+if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Force $PROFILE | Out-Null }
+Add-Content $PROFILE 'Set-Alias cdw-push C:\Projetos\cloud-workstation\scripts\cdw-push.ps1'
+. $PROFILE
+```
+(Troque `C:\Projetos\cloud-workstation` pelo caminho do seu clone.) Depois:
+```powershell
+cdw-push .\relatorio.pdf                        # vai para /home/dev/work/
+cdw-push .\meu-projeto .\notas.txt -Dest projetos   # vai para /home/dev/work/projetos/
+cdw-push *.csv -Dest dados                       # curingas funcionam
+cdw-push -ConfigOnly                             # só atualiza o Host cdw (ex.: antes do VS Code)
+```
+O script pergunta o IP ao WSL (`scripts/vm-info.sh`), atualiza o bloco
+`Host cdw` do seu `C:\Users\<você>\.ssh\config` (mantendo `IdentityFile`,
+`LocalForward` etc.; a versão anterior fica em `config.bak-cdw`) e copia com
+`scp -r`. Assim, `ssh cdw` e o VS Code Remote - SSH também passam a apontar
+para a VM nova. Se a sua distribuição WSL não for a padrão, defina
+`$env:CDW_WSL_DISTRO` (ex.: `Ubuntu-24.04`).
+
+**No WSL:** `make push ORIGEM="arquivo pasta" DESTINO=projetos` (ou
+`bash scripts/push.sh -d projetos "arquivo com espaço"`).
+
+Chave de host: cada VM tem um `known_hosts` próprio (`known_hosts.<id>` no
+estado do WSL e `~/.ssh/known_hosts.cdw.<id>` no Windows, copiado do WSL).
+Uma VM nova é aceita na primeira conexão e fica fixada; uma chave diferente
+para a mesma VM continua sendo recusada. A verificação nunca é desligada.
 
 ## Documentação
 - Decisões: [`docs/adr/`](docs/adr/)
