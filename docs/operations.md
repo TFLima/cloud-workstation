@@ -87,8 +87,9 @@ ssh-keygen -t ed25519 -C "cdw"
 Aceite o caminho sugerido (Enter) e escolha uma senha para a chave (ou deixe
 vazia). Isso cria `~/.ssh/id_ed25519` (privada, **nunca** compartilhe) e
 `~/.ssh/id_ed25519.pub` (pública, é a que vai para a VM). Para usar o VS Code,
-a chave também precisa existir no Windows; veja "VS Code Remote - SSH" mais
-adiante.
+a **mesma** chave precisa existir no Windows. Se o Windows já tem uma chave
+(`C:\Users\<você>\.ssh\id_ed25519`), o mais simples é usar a dele também no
+WSL, em vez de criar outra: veja [`ssh-key.md`](ssh-key.md), passo 4.
 
 ### Passo 6: criar o projeto e o token na Hetzner
 Isso é feito no navegador, no site da Hetzner; nada é instalado.
@@ -157,6 +158,7 @@ seguindo "Backup e restore" abaixo.
 | Criar a VM | `make up` | Pede que você digite `criar`. Espera o bootstrap terminar e, se já existir um backup, sobe os serviços e o restaura (ver "Backup e restore"). |
 | Ver estado | `make status` | IP, estado na Hetzner, versão do bootstrap, disco e memória. |
 | Entrar | `make connect` | SSH com `known_hosts` próprio da VM. |
+| Conferir a chave SSH | `make key-check` | Mesma chave no `.env`, no Windows, na Hetzner e na VM; `make authorize-key` libera a do Windows na VM atual. |
 | VS Code | `make connect-print` | Copie o bloco `Host cdw` para `C:\Users\<você>\.ssh\config`, ou rode `cdw-push -ConfigOnly` no PowerShell para atualizá-lo sozinho. |
 | Copiar arquivos | `make push ORIGEM=... DESTINO=...` | Para `~/work` na VM pelo IP atual; no PowerShell, `cdw-push` (ver README). |
 | Diagnóstico | `make doctor` | Falha se houver porta exposta, SSH com senha, disco cheio etc. |
@@ -167,9 +169,12 @@ seguindo "Backup e restore" abaixo.
 | Auditoria | `make audit` | Lista recursos na Hetzner com o rótulo do projeto; não destrói nada. |
 
 ## VS Code Remote - SSH (Windows)
-- O VS Code usa o OpenSSH do Windows. A chave privada precisa existir no
-  Windows (ex.: `C:\Users\<você>\.ssh\id_ed25519`); se ela estiver só no WSL,
-  copie-a com permissões restritas ou use o agente do Windows (`ssh-add`).
+- O VS Code usa o OpenSSH do Windows e a chave do Windows
+  (`C:\Users\<você>\.ssh\id_ed25519`). Ela precisa ser a mesma do `.env`;
+  `make key-check` confere, e `make authorize-key` libera a do Windows numa
+  VM que já existe. No `config` do Windows o `IdentityFile` é
+  `~/.ssh/id_ed25519` ou `C:/Users/...`, nunca `/home/...` (caminho do WSL).
+  Detalhes e recuperação de acesso: [`ssh-key.md`](ssh-key.md).
 - Na primeira conexão, confirme a impressão digital mostrada. Ela deve bater
   com `ssh-keygen -lf ~/.local/state/cdw/known_hosts.<id>` no WSL.
 - Para serviços internos use túneis (`LocalForward 5432 127.0.0.1:5432`);

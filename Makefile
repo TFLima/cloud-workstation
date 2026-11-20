@@ -9,7 +9,7 @@ TF ?= $(shell command -v tofu >/dev/null 2>&1 && echo tofu || echo terraform)
 TF_DIR := infrastructure/terraform
 SH_FILES := $(shell find scripts tests -name '*.sh' -type f | sort)
 
-.PHONY: help init plan up status connect connect-print destroy-vm push deploy backup down restore doctor audit \
+.PHONY: help init plan up status connect connect-print key-check authorize-key destroy-vm push deploy backup down restore doctor audit \
 	lint lint-sh lint-yaml lint-tf validate validate-tf validate-compose test check
 
 help: ## Lista os alvos disponíveis
@@ -33,6 +33,12 @@ connect: ## Abre uma sessão SSH na VM
 
 connect-print: ## Mostra o comando SSH e o bloco para o VS Code Remote - SSH
 	@bash scripts/connect.sh --print
+
+key-check: ## Confere se a chave SSH é a mesma no .env, no Windows, na Hetzner e na VM
+	@bash scripts/key-check.sh
+
+authorize-key: ## Autoriza mais uma chave .pub na VM atual (padrão: a do Windows), sem recriar
+	@bash scripts/authorize-key.sh $(if $(CHAVE),'$(CHAVE)')
 
 push: ## Copia ORIGEM (arquivos/pastas) para ~/work[/DESTINO] na VM, seja qual for o IP
 	@test -n "$(ORIGEM)" || { echo 'Uso: make push ORIGEM="arquivo pasta" [DESTINO=subpasta]' >&2; exit 2; }
