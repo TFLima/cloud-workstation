@@ -26,14 +26,15 @@ windows_identity() {
 	local win_dir win_path md5
 	win_path="$(cdw_windows_path "$CDW_SSH_PRIVATE_KEY_FILE")"
 	if [[ -n "$win_path" ]]; then
-		printf '%s\n' "$win_path"
+		printf '"%s"\n' "$win_path"
 		return 0
 	fi
 	win_dir="$(cdw_windows_ssh_dir)"
 	md5="$(cdw_key_fp "$CDW_SSH_PUBLIC_KEY_FILE" md5 2>/dev/null || true)"
 	if [[ -n "$win_dir" ]]; then
 		win_path="$(cdw_windows_path "$win_dir/id_ed25519")"
-		printf '%s\n' "${win_path:-~/.ssh/id_ed25519}"
+		# shellcheck disable=SC2088 # o "~" é literal: quem expande é o OpenSSH do Windows
+		if [[ -n "$win_path" ]]; then printf '"%s"\n' "$win_path"; else printf '%s\n' '~/.ssh/id_ed25519'; fi
 		if [[ "$(cdw_key_fp "$win_dir/id_ed25519.pub" md5 2>/dev/null || true)" != "$md5" ]]; then
 			printf '    # ATENÇÃO: esta chave do Windows não é a do .env; rode "make authorize-key" (docs/ssh-key.md)\n'
 		fi

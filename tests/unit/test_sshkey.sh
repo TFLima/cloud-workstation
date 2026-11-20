@@ -152,7 +152,9 @@ run_cdw env CDW_WINDOWS_SSH_DIR="$TMP/nao-existe" bash "$ROOT/scripts/connect.sh
 assert_contains "$OUT" "IdentityFile ~/.ssh/id_ed25519" "sem a pasta do Windows, usa ~ (que o Windows expande)"
 assert_contains "$OUT" "confira com \"make key-check\"" "e pede para conferir a chave"
 run_cdw env CDW_SSH_PRIVATE_KEY_FILE=/mnt/c/Users/User/.ssh/id_ed25519 bash "$ROOT/scripts/connect.sh" --print
-assert_contains "$OUT" "IdentityFile C:/Users/User/.ssh/id_ed25519" "chave em /mnt/c vira caminho C:/ no bloco do Windows"
+assert_contains "$OUT" "IdentityFile \"C:/Users/User/.ssh/id_ed25519\"" "chave em /mnt/c vira caminho C:/ no bloco do Windows"
+run_cdw env "CDW_SSH_PRIVATE_KEY_FILE=/mnt/c/Users/Test User/.ssh/id_ed25519" bash "$ROOT/scripts/connect.sh" --print
+assert_contains "$OUT" "IdentityFile \"C:/Users/Test User/.ssh/id_ed25519\"" "caminho com espaço vai entre aspas"
 assert_not_contains "$OUT" "IdentityFile $TMP/id_wsl" "nunca põe um caminho do WSL no bloco do Windows"
 
 finish
