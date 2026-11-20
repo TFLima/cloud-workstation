@@ -35,12 +35,22 @@ make init                                # valida tudo sem imprimir segredos
 | `make plan` | Escolhe o tipo disponível, mostra custo estimado e o plano (não cria nada) | 2 ✅ |
 | `make up` | Cria VM, firewall e chave SSH após você digitar `criar` (PAGO) | 2 ✅ |
 | `make status` / `connect` / `connect-print` | Estado da VM, SSH e bloco para o VS Code | 2 ✅ |
+| `make key-check` | Confere se a chave SSH é a mesma no `.env`, no Windows, na Hetzner e na VM | 5 ✅ |
+| `make authorize-key [CHAVE=...pub]` | Autoriza mais uma chave pública na VM atual (padrão: a do Windows), sem recriar | 5 ✅ |
 | `make push ORIGEM=... [DESTINO=...]` | Copia arquivos/pastas do WSL para `~/work` na VM, seja qual for o IP | 5 ✅ |
 | `make deploy` | Stacks Docker por perfil (`tools`/`db`/`cache`/`full`) na VM | 3 ✅ |
 | `make backup` / `restore` | Backup restic criptografado (fora da Hetzner) e restauração | 4 ✅ |
 | `make down` | Backup verificado + auditoria de custo + confirmação + destruição | 5 ✅ |
 | `make audit` | Lista recursos na Hetzner com o rótulo do projeto (achar órfãos) | 5 ✅ |
 | `make doctor` | Diagnóstico de SSH, Docker, disco, memória, rede e portas | 2 ✅ |
+
+## Chave SSH (uma só para Windows, WSL e toda VM)
+O VS Code usa a chave do **Windows**; o `make up` põe na VM a chave do `.env`
+(do **WSL**). Se forem chaves diferentes, o VS Code recebe `Permission denied`.
+Use a mesma chave nos dois lados e confira com `make key-check`; para liberar
+a chave do Windows numa VM que já existe, sem recriá-la, `make authorize-key`.
+Passo a passo (inclusive para quando a VM não aceita nenhuma chave sua):
+[`docs/ssh-key.md`](docs/ssh-key.md).
 
 ## Copiar arquivos para a VM (o IP muda a cada `make up`)
 O IP atual é lido do estado OpenTofu, então você não precisa saber qual é.

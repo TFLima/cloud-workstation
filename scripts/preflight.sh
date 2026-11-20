@@ -4,6 +4,10 @@
 set -Eeuo pipefail
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+# shellcheck source=scripts/lib/hcloud.sh
+source "$CDW_ROOT/scripts/lib/hcloud.sh"
+# shellcheck source=scripts/lib/sshkey.sh
+source "$CDW_ROOT/scripts/lib/sshkey.sh"
 
 ENV_FILE="${CDW_ENV_FILE:-$CDW_ROOT/.env}"
 problems=0
@@ -65,6 +69,28 @@ if [[ -f "$key_file" ]]; then
 	fi
 	if grep -q 'PRIVATE KEY' "$key_file"; then
 		fail "o arquivo indicado contém uma chave PRIVADA; aponte para o .pub"
+	fi
+	# A mesma chave em todo lugar (docs/ssh-key.md): avisos, não falhas, para
+	# não bloquear quem usa de propósito chaves diferentes.
+	key_md5="$(cdw_key_fp "$key_file" md5 || true)"
+	win_dir="$(cdw_windows_ssh_dir)"
+	if [[ -n "$key_md5" && -n "$win_dir" ]]; then
+		if [[ "$(cdw_key_fp "$win_dir/id_ed25519.pub" md5 || true)" == "$key_md5" ]]; then
+			ok "o Windows (VS Code) usa a mesma chave SSH"
+		else
+			skip "o Windows ($win_dir) usa OUTRA chave SSH; o VS Code não vai entrar nas VMs novas (ver docs/ssh-key.md)"
+		fi
+	fi
+	if [[ -n "$key_md5" && "$token" =~ ^[A-Za-z0-9]{64}$ ]]; then
+		if hz_md5="$(TF_VAR_name="${TF_VAR_name:-cdw}" cdw_hetzner_key_fp)"; then
+			if [[ -n "$hz_md5" && "$hz_md5" != "$key_md5" ]]; then
+				skip "a chave ${TF_VAR_name:-cdw}-operator na Hetzner (MD5 $hz_md5) não é a do .env (MD5 $key_md5); a VM atual foi criada com a outra. Rode make key-check"
+			elif [[ -n "$hz_md5" ]]; then
+				ok "a chave registrada na Hetzner é a do .env"
+			fi
+		else
+			skip "não consegui consultar a chave registrada na Hetzner"
+		fi
 	fi
 else
 	fail "chave pública SSH não encontrada (CDW_SSH_PUBLIC_KEY_FILE)"

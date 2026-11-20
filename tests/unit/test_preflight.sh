@@ -28,6 +28,7 @@ ENV
 run_preflight() {
 	set +e
 	OUT="$(env -i PATH="$PATH" HOME="$TMP" CDW_TF_BIN=tofu CDW_ENV_FILE="$TMP/env" \
+		CDW_HCLOUD_API="${PREFLIGHT_API:-http://127.0.0.1:1/v1}" ${PREFLIGHT_WIN:+CDW_WINDOWS_SSH_DIR="$PREFLIGHT_WIN"} \
 		bash "$ROOT/scripts/preflight.sh" 2>&1)"
 	STATUS=$?
 	set -e

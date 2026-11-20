@@ -51,9 +51,13 @@ if ((existed)); then
 		recorded_fp="$(cat "$fp_file")"
 		if [[ "$recorded_fp" != "$key_fp" && "${CDW_ALLOW_KEY_ROTATION:-0}" != "1" ]]; then
 			die "a chave pública local mudou desde que esta VM foi criada; aplicar agora poderia bloquear seu próprio acesso.
-Para trocar a chave sem perder acesso: conecte com a chave antiga, adicione a nova em
-~/.ssh/authorized_keys na VM manualmente, e então rode de novo com CDW_ALLOW_KEY_ROTATION=1.
+Para trocar a chave sem perder acesso: com a chave antiga ainda no .env, rode
+make authorize-key CHAVE=<nova>.pub (ou adicione a nova em ~/.ssh/authorized_keys na VM),
+troque o .env e rode de novo com CDW_ALLOW_KEY_ROTATION=1 (ver docs/ssh-key.md).
 Alternativa: make destroy-vm && make up recria a VM já com a chave atual."
+		elif [[ "$recorded_fp" != "$key_fp" ]]; then
+			log "troca de chave autorizada (CDW_ALLOW_KEY_ROTATION=1); a nova chave passa a ser a de referência"
+			printf '%s\n' "$key_fp" >"$fp_file"
 		fi
 	else
 		printf '%s\n' "$key_fp" >"$fp_file"
