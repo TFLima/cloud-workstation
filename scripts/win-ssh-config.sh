@@ -49,7 +49,12 @@ else
 	warn "o WSL ainda não conhece a chave de host desta VM; a primeira conexão do Windows vai aceitá-la e fixá-la"
 fi
 
-identity="$(cdw_windows_path "$win_dir/id_ed25519")"
+# A chave do .env, se ela estiver num disco do Windows (/mnt/c/...); senão a
+# chave padrão do Windows, se existir; senão "~" (expandido pelo Windows).
+identity="$(cdw_windows_path "$CDW_SSH_PRIVATE_KEY_FILE")"
+if [[ -z "$identity" && -f "$win_dir/id_ed25519" ]]; then
+	identity="$(cdw_windows_path "$win_dir/id_ed25519")"
+fi
 identity="${identity:-~/.ssh/id_ed25519}"
 [[ "$identity" == *" "* ]] && identity="\"$identity\""
 
@@ -81,7 +86,7 @@ if [[ -f "$config" ]]; then tr -d '\r' <"$config"; fi |
 	function emit_managed(   i) { for (i = 1; i <= n; i++) if (m[i] != "") print "    " m[i] }
 	{
 		line = $0
-		if (match(line, /^[ \t]*(Host|Match)[ \t]/)) {
+		if (match(tolower(line), /^[ \t]*(host|match)[ \t]/)) {
 			inblock = 0
 			split(line, f, /[ \t]+/)
 			first = (f[1] == "") ? f[2] : f[1]

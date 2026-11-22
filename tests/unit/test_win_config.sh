@@ -69,6 +69,18 @@ assert_contains "$(cat "$TMP/win/config.bak-cdw")" "198.51.100.1" "guarda a vers
 run_cfg
 assert_contains "$OUT" "nada mudou" "rodar de novo não muda nada"
 
+echo "cabeçalhos em minúsculas (o OpenSSH aceita):"
+printf 'host cdw\n    HostName 198.51.100.1\nhost producao\n    HostName 192.0.2.9\n    User deploy\n' >"$TMP/win/config"
+run_cfg
+assert_contains "$(resolved producao)" "hostname 192.0.2.9" "não apaga o HostName do host seguinte"
+assert_contains "$(resolved producao)" "user deploy" "não apaga o User do host seguinte"
+assert_contains "$(resolved)" "hostname 203.0.113.77" "atualiza o bloco escrito como 'host cdw'"
+assert_status 1 "$(grep -ci '^host cdw$' "$TMP/win/config")" "não duplica o bloco"
+
+echo "chave do .env com nome próprio no Windows:"
+run_cfg CDW_SSH_PRIVATE_KEY_FILE=/mnt/c/Users/User/.ssh/workstation
+assert_contains "$(cat "$TMP/win/config")" "IdentityFile C:/Users/User/.ssh/workstation" "usa a chave do .env quando ela está no disco do Windows"
+
 echo "túneis por CDW_LOCAL_FORWARDS:"
 run_cfg CDW_LOCAL_FORWARDS="8000, 18000:3000"
 cfg="$(cat "$TMP/win/config")"
