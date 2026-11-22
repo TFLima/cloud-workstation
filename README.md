@@ -36,6 +36,7 @@ make init                                # valida tudo sem imprimir segredos
 | `make up` | Cria VM, firewall e chave SSH após você digitar `criar` (PAGO) | 2 ✅ |
 | `make status` / `connect` / `connect-print` | Estado da VM, SSH e bloco para o VS Code | 2 ✅ |
 | `make key-check` | Confere se a chave SSH é a mesma no `.env`, no Windows, na Hetzner e na VM | 5 ✅ |
+| `make win-config` | Aponta o `Host cdw` do Windows (VS Code) para a VM atual: IP, known_hosts e túneis (o `make up` já faz) | 5 ✅ |
 | `make authorize-key [CHAVE=...pub]` | Autoriza mais uma chave pública na VM atual (padrão: a do Windows), sem recriar | 5 ✅ |
 | `make push ORIGEM=... [DESTINO=...]` | Copia arquivos/pastas do WSL para `~/work` na VM, seja qual for o IP | 5 ✅ |
 | `make deploy` | Stacks Docker por perfil (`tools`/`db`/`cache`/`full`) na VM | 3 ✅ |
@@ -51,6 +52,14 @@ Use a mesma chave nos dois lados e confira com `make key-check`; para liberar
 a chave do Windows numa VM que já existe, sem recriá-la, `make authorize-key`.
 Passo a passo (inclusive para quando a VM não aceita nenhuma chave sua):
 [`docs/ssh-key.md`](docs/ssh-key.md).
+
+**Recriar a VM sem passos manuais:** rodado no WSL, o `make up` termina
+liberando a chave do Windows na VM (se for outra) e atualizando o `Host cdw`
+do `C:\Users\<você>\.ssh\config`: IP novo, `known_hosts` próprio da VM
+(sem "REMOTE HOST IDENTIFICATION HAS CHANGED" quando a Hetzner reaproveita um
+IP) e os túneis de `CDW_LOCAL_FORWARDS` (ex.: `CDW_LOCAL_FORWARDS=8000` no
+`.env` abre `http://localhost:8000` sempre que o VS Code conecta). Depois do
+`make up`, é só conectar no VS Code.
 
 ## Copiar arquivos para a VM (o IP muda a cada `make up`)
 O IP atual é lido do estado OpenTofu, então você não precisa saber qual é.
