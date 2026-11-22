@@ -55,6 +55,24 @@ else
 	log "VM pronta: $user@$ip (bootstrap $want_version). Próximo passo: make connect"
 fi
 
+# Acesso do Windows (VS Code), sem passos manuais a cada VM nova
+# (docs/ssh-key.md): se a chave do Windows não for a do .env, ela é liberada na
+# VM; depois o Host cdw do Windows passa a apontar para o IP novo, com o
+# known_hosts próprio desta VM e os túneis de CDW_LOCAL_FORWARDS. Só no WSL;
+# CDW_WINDOWS_SSH_CONFIG=0 desliga. Uma falha aqui não desfaz o make up.
+# shellcheck source=scripts/lib/sshkey.sh
+source "$CDW_ROOT/scripts/lib/sshkey.sh"
+win_dir="$(cdw_windows_ssh_dir)"
+if [[ -n "$win_dir" && "${CDW_WINDOWS_SSH_CONFIG:-1}" == "1" ]]; then
+	if [[ -f "$win_dir/id_ed25519.pub" &&
+		"$(cdw_key_fp "$win_dir/id_ed25519.pub" || true)" != "$(cdw_key_fp "$CDW_SSH_PUBLIC_KEY_FILE" || true)" ]]; then
+		bash "$CDW_ROOT/scripts/authorize-key.sh" "$win_dir/id_ed25519.pub" ||
+			warn "não consegui liberar a chave do Windows na VM; rode make authorize-key"
+	fi
+	bash "$CDW_ROOT/scripts/win-ssh-config.sh" ||
+		warn "não consegui atualizar o Host cdw do Windows; rode make win-config"
+fi
+
 # Cópia externa do estado (ADR-0007): sem ela, perder este computador deixa a
 # VM cobrando sem estado para destruí-la. Uma falha aqui não desfaz o make up.
 if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then

@@ -152,3 +152,24 @@ A partir daí:
   `make authorize-key CHAVE=<nova>.pub`, troque o `.env` e siga como acima.
 - Guarde uma cópia da chave privada no seu gerenciador de senhas. Se perder
   a chave do Windows, o caminho é o passo 3 (ou uma VM nova).
+
+## 5. Toda VM nova pronta para o VS Code, sem passos manuais
+No `.env`, liste as portas dos seus apps (opcional):
+```
+CDW_LOCAL_FORWARDS=8000            # ou 8000,18000:3000 (porta no Windows:porta na VM)
+```
+Rodado no WSL, o `make up` faz sozinho, no fim:
+1. libera a chave do Windows na VM, se ela não for a do `.env`
+   (o mesmo que `make authorize-key`);
+2. atualiza o `Host cdw` em `C:\Users\<você>\.ssh\config` (o mesmo que
+   `make win-config`): IP novo, `IdentityFile` no caminho do Windows,
+   `UserKnownHostsFile ~/.ssh/known_hosts.cdw.<id>` com a chave de host que o
+   WSL já verificou, e as linhas `LocalForward` das portas acima. As outras
+   linhas do bloco e os outros hosts ficam como estão; a versão anterior vai
+   para `config.bak-cdw`.
+
+Com o known_hosts próprio de cada VM, um IP reaproveitado pela Hetzner não
+dá mais "REMOTE HOST IDENTIFICATION HAS CHANGED". Depois do `make up`, é só
+conectar no VS Code e abrir `http://localhost:<porta>`. Para desligar,
+`CDW_WINDOWS_SSH_CONFIG=0`. Se o `make up` avisar que não conseguiu atualizar,
+rode `make win-config` (e `make authorize-key`) à mão.

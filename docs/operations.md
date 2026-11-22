@@ -159,7 +159,8 @@ seguindo "Backup e restore" abaixo.
 | Ver estado | `make status` | IP, estado na Hetzner, versão do bootstrap, disco e memória. |
 | Entrar | `make connect` | SSH com `known_hosts` próprio da VM. |
 | Conferir a chave SSH | `make key-check` | Mesma chave no `.env`, no Windows, na Hetzner e na VM; `make authorize-key` libera a do Windows na VM atual. |
-| VS Code | `make connect-print` | Copie o bloco `Host cdw` para `C:\Users\<você>\.ssh\config`, ou rode `cdw-push -ConfigOnly` no PowerShell para atualizá-lo sozinho. |
+| VS Code | `make win-config` | O `make up` já faz: aponta o `Host cdw` do Windows para a VM atual (IP, known_hosts, túneis de `CDW_LOCAL_FORWARDS`). |
+| Ver o bloco | `make connect-print` | Copie o bloco `Host cdw` para `C:\Users\<você>\.ssh\config`, ou rode `cdw-push -ConfigOnly` no PowerShell para atualizá-lo sozinho. |
 | Copiar arquivos | `make push ORIGEM=... DESTINO=...` | Para `~/work` na VM pelo IP atual; no PowerShell, `cdw-push` (ver README). |
 | Diagnóstico | `make doctor` | Falha se houver porta exposta, SSH com senha, disco cheio etc. |
 | Subir ferramentas/serviços | `make deploy` | Perfis em `CDW_COMPOSE_PROFILES` (padrão `tools`); ver abaixo. |
